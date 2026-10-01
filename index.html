@@ -28,15 +28,6 @@
     </svg>
     <span class="header-wordmark">AZ-104</span>
   </a>
-  <nav class="top">
-    <a href="#neste">Neste økt</a>
-    <a href="#ukeplan">Ukeplan</a>
-    <a href="#okta">Økta</a>
-    <a href="#miljo">Miljø</a>
-    <a href="#verktoy">Verktøy</a>
-    <a href="#eksamen">Eksamen</a>
-    <a href="#endringslogg">Endringer</a>
-  </nav>
 </header>
 
 <!-- ======================================================================
@@ -45,27 +36,18 @@
 <div class="hero">
   <span class="dates">5. oktober – 7. desember 2026</span>
   <h1>AZ-104 kollokvium</h1>
-  <p class="lead">
-    Ti mandager mot sertifiseringen Microsoft Azure Administrator. Scott Duffy hjemme,
-    Microsoft Learn sammen. Mandager kl. 17–19 i DEG16.
-  </p>
 
   <!-- Fylles av side.js fra ukeplan-tabellen. Innholdet her er det som vises uten JS. -->
   <div class="neste" id="neste">
-    <div class="eyebrow">Neste økt</div>
+    <div class="eyebrow">Neste møte</div>
     <div class="nar" data-felt="nar">Mandag 5. oktober · Uke 1</div>
     <div data-felt="linje"><span class="tema" data-felt="tema">Fundament, PowerShell/CLI, ARM og Bicep</span> · temaeier <span data-felt="eier">Anders</span></div>
     <p data-felt="forb">
-      Kl. 17–19 i DEG16. Se Duffy-seksjon <span data-felt="duffy">1–3, 12–13</span> før økta
+      Kl. 17–19 i DEG16. Se Duffy-seksjon <span data-felt="duffy">1–3, 12–13</span> før møtet
       (<span data-felt="tid">2 t 12 min · 1 t 46 min på 1,25×</span>).
     </p>
-    <a class="btn-lenke" data-felt="lenke" href="uke-01/">Til uke 1 →</a><a class="btn-lenke sekundaer" data-felt="ekstra" href="#verktoy">Kom i gang</a>
+    <a class="btn-lenke" data-felt="lenke" href="uke-01/">Til uke 1 →</a>
   </div>
-</div>
-
-<div class="callout info no-print">
-  Siden oppdateres underveis, blant annet med lab og kunnskapsspørsmål for hver uke.
-  Se <a href="#endringslogg">endringsloggen</a> nederst for hva som er nytt.
 </div>
 
 <!-- ======================================================================
@@ -74,9 +56,8 @@
 <section id="slik">
   <div class="eyebrow">Arbeidsform</div>
   <h2>Slik jobber vi</h2>
-  <p class="section-lead">Scott Duffy hjemme. Microsoft Learn i kollokviet.</p>
   <p>
-    Duffy-kurset går vi gjennom på egen hånd før hver økt, i vårt eget tempo. Learn-modulene gjør vi
+    Duffy-kurset går vi gjennom på egen hånd før hvert møte, i vårt eget tempo. Learn-modulene gjør vi
     sammen når vi møtes. De har øvelser med steg-for-steg-instruksjoner, og de fungerer best når vi gjør
     dem i fellesskap. Temaeieren for uka har ansvaret for å gjennomføre labben.
   </p>
@@ -84,34 +65,26 @@
     <table>
       <thead><tr><th>Hvem</th><th>Hva</th><th class="tall">Tid per uke</th></tr></thead>
       <tbody>
-        <tr><td>Alle</td><td>Se Duffy-seksjonene for ukas tema</td><td class="tall">4–5 t</td></tr>
+        <tr><td>Alle</td><td>Se Duffy-seksjonene for ukas tema</td><td class="tall">1–2 t</td></tr>
         <tr><td>Temaeier</td><td>I tillegg: kjør Learn-labben gjennom på forhånd</td><td class="tall">+2 t</td></tr>
       </tbody>
     </table>
   </div>
-  <p>
-    Vi er sju: Anders, Jan, Svein-Tore, Terje, Olav, Nicolay og Linn. Linn er med på øktene og labbene,
-    men er ikke temaeier for noen uke.
-  </p>
-  <p>
-    Meld fra tidlig hvis du ikke rekker å forberede uka di. Vi bytter heller uke enn at noen møter uforberedt.
-  </p>
 
   <h3>Kilder</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Kilde</th><th>Bruk</th></tr></thead>
       <tbody>
-        <tr><td><a href="https://www.udemy.com/course/70533-azure/">Scott Duffy, Udemy</a></td><td>Gjennomgang hjemme. 26 seksjoner, 190 forelesninger og 18 t video</td></tr>
+        <tr><td><a href="https://www.udemy.com/course/70533-azure/">Scott Duffy, Udemy</a></td><td>Gjennomgang hjemme. 26 seksjoner, 190 forelesninger og 18 t video. Kjøp kurset selv og lever utleggsregning</td></tr>
         <tr><td>Duffys studieguide og cram-videoer</td><td>Eksamensfeller og repetisjon. Studieguiden ligger som PDF i seksjon 1 av kurset</td></tr>
         <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/credentials/certifications/azure-administrator/">Microsoft Learn</a></td><td>Labbene i kollokviet. Seks læringsstier</td></tr>
         <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104">Microsofts studieguide</a> og <a href="https://aka.ms/AZ104-ExamPrep">prep-videoer</a></td><td>Hva som måles, og tips og strategi fra Microsofts egne folk. Gratis</td></tr>
-        <tr><td>Practice assessment</td><td>Måling underveis. Gratis. Duffy har i tillegg en egen practice test i kurset</td></tr>
-        <tr><td>Exam sandbox</td><td>Bli kjent med spørsmålstypene. Uke 10</td></tr>
+        <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/credentials/certifications/azure-administrator/practice/assessment?assessment-type=practice&amp;assessmentId=21&amp;practice-assessment-type=certification">Practice assessment</a></td><td>Måling underveis. Gratis. Duffy har i tillegg en egen practice test i kurset</td></tr>
+        <tr><td><a href="https://aka.ms/examdemo">Exam sandbox</a></td><td>Bli kjent med spørsmålstypene. Uke 10</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="table-note">Lenkene til practice assessment og exam sandbox står under <a href="#eksamen">Eksamen</a>.</p>
 </section>
 
 <!-- ======================================================================
@@ -120,10 +93,6 @@
 <section id="ukeplan">
   <div class="eyebrow">Ti mandager</div>
   <h2>Ukeplan</h2>
-  <p class="section-lead">
-    Hver uke har sin egen side med Duffy-seksjonene, Learn-modulene, labben og kunnskapssjekken.
-    Duffy-tiden er ren videotid. De fleste av oss ser på 1,25×, så begge tallene står her.
-  </p>
   <div class="table-wrap">
     <table>
       <thead>
@@ -208,7 +177,7 @@
           <td class="c-tema"><a href="uke-10/">Study review, exam sandbox, eksamen</a><span class="pill neste-pill">Neste</span></td>
           <td class="c-eier">Anders</td>
           <td class="c-duffy m-skjul"><span class="sek">25–26</span><br><span class="tid">3 t 1 min</span><br><span class="muted"><span class="tid125">2 t 25 min</span> på 1,25×</span></td>
-          <td class="c-learn m-skjul">Practice assessment<br><span class="muted">og exam sandbox</span></td>
+          <td class="c-learn m-skjul"><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/credentials/certifications/azure-administrator/practice/assessment?assessment-type=practice&amp;assessmentId=21&amp;practice-assessment-type=certification">Practice assessment</a><br><span class="muted">og <a href="https://aka.ms/examdemo">exam sandbox</a></span></td>
         </tr>
       </tbody>
       <tfoot>
@@ -216,19 +185,14 @@
       </tfoot>
     </table>
   </div>
-  <p>
-    ARM-maler og Bicep ligger i Duffys seksjon 12–13. Vi tar dem i uke 1 i stedet, slik at alle labbene
-    kan bygges med IaC. Microsoft lister selv ARM-maler og Bicep som viktig.
-  </p>
 </section>
 
 <!-- ======================================================================
-     Økta
+     Format
      ====================================================================== -->
 <section id="okta">
   <div class="eyebrow">Mandager kl. 17–19 i DEG16</div>
-  <h2>Øktformatet</h2>
-  <p class="section-lead">Fast dag og tid, to timer. Invitasjonene ligger i kalenderen.</p>
+  <h2>Format</h2>
   <div class="table-wrap">
     <table>
       <thead><tr><th class="tall">Tid</th><th>Innhold</th></tr></thead>
@@ -247,126 +211,24 @@
 </section>
 
 <!-- ======================================================================
-     Miljø og kostnadskontroll
+     Rydd opp
      ====================================================================== -->
 <section id="miljo">
   <div class="eyebrow">Azure</div>
-  <h2>Miljø og kostnadskontroll</h2>
-  <p class="section-lead">Miljøet er satt opp og klart før uke 1. Dette får du:</p>
-  <ul>
-    <li>En brukerkonto i en egen treningstenant, satt opp bare for dette løpet. Der oppretter vi brukere, grupper, roller og policyer på katalognivå.</li>
-    <li>Din egen pay-as-you-go-subscription, <code>AZ-104 &lt;Navn&gt;</code>, med deg som Owner. Du har fulle rettigheter i ditt eget område og ser ikke de andres.</li>
-    <li>Et management group-hierarki over subscriptionene, så uke 3 har noe reelt å jobbe med.</li>
-    <li>En Entra ID P2-prøvelisens på tenanten. Enkelte identitetsøvelser krever den.</li>
-    <li>Budsjettvarsel på subscriptionen din.</li>
-  </ul>
-  <div class="callout info">
-    <b>Brukernavn, passord og navnet på lab-tenanten får du av Anders.</b> De står ikke her, fordi siden er åpen for alle som har lenken.
-  </div>
+  <h2>Rydd opp etter hvert møte</h2>
   <p>
-    Tenant og subscriptions koster ingenting i seg selv. Vi betaler bare for ressurser som faktisk kjører,
-    og derfor er opprydding et fast punkt i hver økt.
+    Mange ressurser koster penger så lenge de finnes, også når ingen bruker dem. Slett derfor det du har
+    laget, før du går. Dette koster mest hvis det blir stående:
   </p>
-
-  <h3>Det som koster</h3>
   <ul>
     <li><b>VPN Gateway og Application Gateway</b> koster per time, uansett bruk. Nettverkslabbene i uke 7 og 8 rives ned samme dag.</li>
     <li><b>VM-er som ikke deallokeres.</b> Sett auto-shutdown når du oppretter dem.</li>
-    <li><b>Glemte ressurser fra tidligere uker.</b> Opprydding er fast punkt sist i hver økt.</li>
+    <li><b>Glemte ressurser fra tidligere uker.</b></li>
   </ul>
-  <p>Bicep hjelper her: kan du gjenskape labben på et minutt, er det lettere å slette alt.</p>
-<pre><code><span class="kom"># Hva står i subscriptionen min?</span>
-az group list -o table
-
-<span class="kom"># Slett en resource group med alt i</span>
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
-</section>
-
-<!-- ======================================================================
-     Verktøy og kom i gang
-     ====================================================================== -->
-<section id="verktoy">
-  <div class="eyebrow">Før uke 1</div>
-  <h2>Verktøy og kom i gang</h2>
-  <p class="section-lead">Ha dette klart før første økt. Mangler du alt, kan du bruke Cloud Shell i nettleseren.</p>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Verktøy</th><th>Sjekk</th><th>Merk</th></tr></thead>
-      <tbody>
-        <tr><td><a href="https://code.visualstudio.com/">VS Code</a> med utvidelsen <a href="https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-bicep">Bicep</a></td><td></td><td class="note">Ikke installer ARM Tools. Learn lenker fortsatt til den, men den er avviklet</td></tr>
-        <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-windows">Azure CLI</a></td><td><code>az version</code></td><td class="note">Mangler den, kjør <code>winget install Microsoft.AzureCLI</code> og åpne et nytt vindu</td></tr>
-        <tr><td>Bicep CLI</td><td><code>az bicep version</code></td><td class="note">Installer med <code>az bicep install</code> hvis den mangler</td></tr>
-        <tr><td>PowerShell</td><td></td><td class="note">Windows PowerShell, som følger med Windows, holder. Kommandoene i labbene er skrevet for PowerShell</td></tr>
-      </tbody>
-    </table>
-  </div>
   <p>
-    <b>Mac eller Linux:</b> installer <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/cli/azure/install-azure-cli">Azure CLI</a>
-    (<code>brew install azure-cli</code> på Mac) og bruk zsh eller bash. <code>az</code>-kommandoene er de samme.
-    Labbene har en egen boks med det som skrives annerledes.
+    Lag alt i én resource group per lab, så er det nok å slette den. Kommandoene står under
+    «Opprydding» på hver ukeside.
   </p>
-
-  <h3>PowerShell, Az-modulen og Azure CLI</h3>
-  <p>
-    Duffy ber deg sjekke at du har siste versjon av PowerShell og Az-modulen. Det er fire forskjellige
-    ting som lett blandes sammen:
-  </p>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Verktøy</th><th>Hva det er</th><th>Trenger du det?</th></tr></thead>
-      <tbody>
-        <tr><td>Windows PowerShell 5.1<br><code>powershell.exe</code></td><td>Følger med Windows. Får ikke ny utvikling lenger</td><td>Du har det allerede. Ikke det Duffy snakker om</td></tr>
-        <tr><td>PowerShell 7<br><code>pwsh</code></td><td>Den nye versjonen, tidligere kalt «PowerShell Core». Den Duffy mener</td><td>Nei, ikke lokalt</td></tr>
-        <tr><td>Az-modulen<br><code>New-AzResourceGroup</code> …</td><td>En PowerShell-modul med Azure-kommandoene. Egen innlogging med <code>Connect-AzAccount</code></td><td>Nei, ikke lokalt</td></tr>
-        <tr><td>Azure CLI<br><code>az group create</code> …</td><td>Et eget verktøy som ikke har noe med PowerShell-versjonen å gjøre. Kjører i hvilket som helst skall</td><td><b>Ja.</b> Labbene bruker det</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="callout ok">
-    <b>Regelen vår: Azure CLI lokalt til labbene, og Az-modulen i Cloud Shell.</b>
-    Lokalt skriver du <code>az</code>-kommandoene i et vanlig PowerShell-vindu (zsh eller bash på Mac og Linux).
-    PowerShell er da bare skallet.
-    Duffy tar med PowerShell fordi eksamen kan vise <code>Az</code>-kommandoer. Dem prøver du i Cloud Shell
-    i PowerShell-modus, der alt er ferdig installert og innlogget.
-  </div>
-
-  <h3>Logg inn</h3>
-  <p>
-    Logg inn med lab-brukeren i en egen CLI-profil. <code>az login</code> i den vanlige profilen erstatter
-    jobbinnloggingen din, og en deploy uten riktig kontekst kan havne i en jobb-subscription.
-  </p>
-<pre><code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"     <span class="kom"># egen profil for kurset, gjelder dette vinduet</span>
-az login --tenant &lt;lab-tenanten&gt;
-az account set --subscription "AZ-104 &lt;Navn&gt;"
-az account show --query "{subscription:name, bruker:user.name}" -o table</code></pre>
-  <p>
-    Du skal se <code>AZ-104 &lt;Navn&gt;</code> og brukernavnet ditt i lab-tenanten. Kjør
-    <code>$env:</code>-linja på nytt i hvert nytt vindu.
-  </p>
-
-  <h3>Cloud Shell</h3>
-  <p>
-    Åpne portal.azure.com i et privat vindu, logg inn med lab-brukeren og velg
-    Cloud Shell → PowerShell → <i>No storage account required</i>. Du får en ferdig innlogget sesjon med
-    både Azure CLI og Az-modulen, men filene forsvinner når den lukkes. Sesjonen lukkes etter 20 minutter
-    uten aktivitet.
-  </p>
-
-  <h3>Vanlige feller</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
-      <tbody>
-        <tr><td><code>az account show</code> viser jobbkontoen</td><td>Kjør <code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"</code> først, og logg inn på nytt med <code>--tenant &lt;lab-tenanten&gt;</code></td></tr>
-        <tr><td>Kommandoer kopiert fra Learn feiler i PowerShell</td><td>CLI-eksemplene i Learn er skrevet for bash. Bruk kommandoene på ukesiden</td></tr>
-        <tr><td>En innstilling fra forrige lab slår inn</td><td>Ikke bruk <code>az configure --defaults group=…</code>. Den blir liggende i CLI-profilen. Send heller <code>-g</code> hver gang. Fjern den med <code>az configure --defaults group=''</code></td></tr>
-        <tr><td>Første deploy er treg, eller «registering for you»</td><td>Resource provideren registreres første gang den brukes i subscriptionen. Det er normalt</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <h3>Duffy-kurset</h3>
-  <p>Kjøp <a href="https://www.udemy.com/course/70533-azure/">kurset på Udemy</a> selv og lever utleggsregning.</p>
 </section>
 
 <!-- ======================================================================
@@ -436,7 +298,7 @@ az account show --query "{subscription:name, bruker:user.name}" -o table</code><
       </div>
       <ul>
         <li>Lab-kommandoene er skrevet om fra Git Bash til PowerShell, og labben i uke 1 er testkjørt på nytt.</li>
-        <li>Verktøy: forskjellen på Windows PowerShell, PowerShell 7, Az-modulen og Azure CLI, og innlogging i egen CLI-profil.</li>
+        <li>Forsiden er kortet ned. Verktøy og innlogging står på ukesiden for uke 1.</li>
         <li>Mac og Linux: Azure CLI i zsh eller bash, med en egen boks på ukesiden for det som skrives annerledes.</li>
         <li>Azure-navn står på engelsk: storage account, resource group, subscription.</li>
       </ul>
@@ -448,7 +310,7 @@ az account show --query "{subscription:name, bruker:user.name}" -o table</code><
         <span class="date">29. september 2026</span>
       </div>
       <ul>
-        <li>Plan, øktformat, miljø, verktøy og eksamen.</li>
+        <li>Plan, format, miljø, verktøy og eksamen.</li>
         <li>Ukeplan for alle ti ukene, med Duffy-seksjoner og Learn-moduler.</li>
         <li>Uke 1 med lab (ARM-mal og Bicep) og fasit til nedlasting.</li>
       </ul>

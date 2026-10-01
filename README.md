@@ -32,7 +32,7 @@ Ingen treff betyr at du kan pushe.
 
 | Sti | Innhold |
 |---|---|
-| `index.html` | Forsiden: neste økt, arbeidsform, ukeplan, øktformat, miljø, verktøy, eksamen, endringslogg |
+| `index.html` | Forsiden: neste møte, arbeidsform, ukeplan, format, opprydding, eksamen, endringslogg |
 | `uke-NN/index.html` | Én side per uke: forberedelse (Duffy og Learn), lab, kunnskapssjekk, opprydding |
 | `uke-NN/*.json`, `*.bicep` | Fasit til ukas lab. Dette er eneste kopi av lab-filene |
 | `assets/` | Felles stilark, skript, favicon og skrifter (Inter og Ovo) |
@@ -42,7 +42,7 @@ Det er ingen byggesteg. HTML-filene er kilden og redigeres direkte.
 Utseendet følger designtokenene fra `FremraOperations/FremraOperations.Web/wwwroot/css/style.css`,
 via `Fremra/rotterdam2026` (merkefarge `#eb4f34`, Inter + Ovo).
 
-**Neste økt** på forsiden fylles av `assets/side.js` fra ukeplan-tabellen. Kortet viser
+**Neste møte** på forsiden fylles av `assets/side.js` fra ukeplan-tabellen. Kortet viser
 første uke med dato i dag eller senere. Legg til `?dato=2026-10-06` i URL-en for å teste en
 annen dato.
 
@@ -62,7 +62,7 @@ annen dato.
    «Mac eller Linux» slik `uke-01` gjør. Azure-navn står på engelsk (storage account, resource group).
 3. Legg `<span class="pill klar">Lab klar</span>` på ukas rad i ukeplanen i `index.html`.
 
-### Kunnskapsspørsmål etter økta
+### Kunnskapsspørsmål etter møtet
 
 Bytt ut callouten under `<section id="kunnskapssjekk">` med ett `<details>` per spørsmål:
 
@@ -75,5 +75,5 @@ Bytt ut callouten under `<section id="kunnskapssjekk">` med ett `<details>` per 
 
 ## Kilder
 
-Kollokvieplanen, Duffy-pensumet og økt-manusene ligger privat hos Anders, ikke i repoet.
+Kollokvieplanen, Duffy-pensumet og manusene til møtene ligger privat hos Anders, ikke i repoet.
 Learn-modulene og eksamensinfoen er hentet fra Microsoft Learn 29.09.2026 og kontrollert 01.10.2026.

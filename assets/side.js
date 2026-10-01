@@ -1,10 +1,10 @@
-// AZ-104 · felles skript for alle sidene. To ting: «Neste økt» på forsiden og kopier-knapper på kodeblokker.
+// AZ-104 · felles skript for alle sidene. To ting: «Neste møte» på forsiden og kopier-knapper på kodeblokker.
 
 (function () {
   'use strict';
 
   // ------------------------------------------------------------------------
-  // Neste økt: første rad i ukeplanen med dato i dag eller senere.
+  // Neste møte: første rad i ukeplanen med dato i dag eller senere.
   // Ukeplan-tabellen er eneste kilde. Kortet i HTML viser uke 1 hvis JS ikke kjører.
   // ?dato=2026-10-06 overstyrer dagens dato, til testing.
   // ------------------------------------------------------------------------
@@ -24,7 +24,6 @@
       felt('forb').hidden = true;
       felt('lenke').textContent = 'Til eksamen →';
       felt('lenke').href = '#eksamen';
-      felt('ekstra').hidden = true;
       return;
     }
 
