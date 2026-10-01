@@ -14,7 +14,7 @@ med deltakerne, ikke bredere.
 **Alt i repoet blir publisert**, også denne README-en. Bare `.github/` og filer som
 begynner med punktum holdes utenfor. Derfor skal dette aldri inn i repoet:
 
-- tenantnavn, tenant-id eller abonnements-id-er
+- tenantnavn, tenant-id eller subscription-id-er
 - brukernavn, passord eller annen innloggingsinfo. Siden sier «får du av Anders»
 - supportsaker, kundenavn eller interne notater
 
@@ -58,6 +58,8 @@ annen dato.
 1. Legg lab-veiledningen inn i `uke-NN/index.html` i stedet for callouten under `<section id="lab">`.
    `uke-01/index.html` viser mønsteret.
 2. Legg fasit-filene i `uke-NN/` og lenk til dem under `<section id="fasit">`.
+   Kommandoene skrives for PowerShell. Bruker labben variabler eller linjeskift, legg ved boksen
+   «Mac eller Linux» slik `uke-01` gjør. Azure-navn står på engelsk (storage account, resource group).
 3. Legg `<span class="pill klar">Lab klar</span>` på ukas rad i ukeplanen i `index.html`.
 
 ### Kunnskapsspørsmål etter økta

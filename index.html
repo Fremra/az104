@@ -255,16 +255,16 @@
   <p class="section-lead">Miljøet er satt opp og klart før uke 1. Dette får du:</p>
   <ul>
     <li>En brukerkonto i en egen treningstenant, satt opp bare for dette løpet. Der oppretter vi brukere, grupper, roller og policyer på katalognivå.</li>
-    <li>Ditt eget pay-as-you-go-abonnement, <code>AZ-104 &lt;Navn&gt;</code>, med deg som Owner. Du har fulle rettigheter i ditt eget område og ser ikke de andres.</li>
-    <li>Et management group-hierarki over abonnementene, så uke 3 har noe reelt å jobbe med.</li>
+    <li>Din egen pay-as-you-go-subscription, <code>AZ-104 &lt;Navn&gt;</code>, med deg som Owner. Du har fulle rettigheter i ditt eget område og ser ikke de andres.</li>
+    <li>Et management group-hierarki over subscriptionene, så uke 3 har noe reelt å jobbe med.</li>
     <li>En Entra ID P2-prøvelisens på tenanten. Enkelte identitetsøvelser krever den.</li>
-    <li>Budsjettvarsel på abonnementet ditt.</li>
+    <li>Budsjettvarsel på subscriptionen din.</li>
   </ul>
   <div class="callout info">
     <b>Brukernavn, passord og navnet på lab-tenanten får du av Anders.</b> De står ikke her, fordi siden er åpen for alle som har lenken.
   </div>
   <p>
-    Tenant og abonnementer koster ingenting i seg selv. Vi betaler bare for ressurser som faktisk kjører,
+    Tenant og subscriptions koster ingenting i seg selv. Vi betaler bare for ressurser som faktisk kjører,
     og derfor er opprydding et fast punkt i hver økt.
   </p>
 
@@ -275,11 +275,11 @@
     <li><b>Glemte ressurser fra tidligere uker.</b> Opprydding er fast punkt sist i hver økt.</li>
   </ul>
   <p>Bicep hjelper her: kan du gjenskape labben på et minutt, er det lettere å slette alt.</p>
-<pre><code><span class="kom"># Hva står i abonnementet mitt?</span>
+<pre><code><span class="kom"># Hva står i subscriptionen min?</span>
 az group list -o table
 
-<span class="kom"># Slett en ressursgruppe med alt i</span>
-az group delete --name &lt;ressursgruppe&gt; --yes --no-wait</code></pre>
+<span class="kom"># Slett en resource group med alt i</span>
+az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
 </section>
 
 <!-- ======================================================================
@@ -300,6 +300,11 @@ az group delete --name &lt;ressursgruppe&gt; --yes --no-wait</code></pre>
       </tbody>
     </table>
   </div>
+  <p>
+    <b>Mac eller Linux:</b> installer <a href="https://learn.microsoft.com/en-us/cli/azure/install-azure-cli">Azure CLI</a>
+    (<code>brew install azure-cli</code> på Mac) og bruk zsh eller bash. <code>az</code>-kommandoene er de samme.
+    Labbene har en egen boks med det som skrives annerledes.
+  </p>
 
   <h3>PowerShell, Az-modulen og Azure CLI</h3>
   <p>
@@ -319,7 +324,8 @@ az group delete --name &lt;ressursgruppe&gt; --yes --no-wait</code></pre>
   </div>
   <div class="callout ok">
     <b>Regelen vår: Azure CLI lokalt til labbene, og Az-modulen i Cloud Shell.</b>
-    Lokalt skriver du <code>az</code>-kommandoene i et vanlig PowerShell-vindu. PowerShell er da bare skallet.
+    Lokalt skriver du <code>az</code>-kommandoene i et vanlig PowerShell-vindu (zsh eller bash på Mac og Linux).
+    PowerShell er da bare skallet.
     Duffy tar med PowerShell fordi eksamen kan vise <code>Az</code>-kommandoer. Dem prøver du i Cloud Shell
     i PowerShell-modus, der alt er ferdig installert og innlogget.
   </div>
@@ -327,12 +333,12 @@ az group delete --name &lt;ressursgruppe&gt; --yes --no-wait</code></pre>
   <h3>Logg inn</h3>
   <p>
     Logg inn med lab-brukeren i en egen CLI-profil. <code>az login</code> i den vanlige profilen erstatter
-    jobbinnloggingen din, og en deploy uten riktig kontekst kan havne i et jobbabonnement.
+    jobbinnloggingen din, og en deploy uten riktig kontekst kan havne i en jobb-subscription.
   </p>
 <pre><code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"     <span class="kom"># egen profil for kurset, gjelder dette vinduet</span>
 az login --tenant &lt;lab-tenanten&gt;
 az account set --subscription "AZ-104 &lt;Navn&gt;"
-az account show --query "{abonnement:name, bruker:user.name}" -o table</code></pre>
+az account show --query "{subscription:name, bruker:user.name}" -o table</code></pre>
   <p>
     Du skal se <code>AZ-104 &lt;Navn&gt;</code> og brukernavnet ditt i lab-tenanten. Kjør
     <code>$env:</code>-linja på nytt i hvert nytt vindu.
@@ -345,9 +351,6 @@ az account show --query "{abonnement:name, bruker:user.name}" -o table</code></p
     både Azure CLI og Az-modulen, men filene forsvinner når den lukkes. Sesjonen lukkes etter 20 minutter
     uten aktivitet.
   </p>
-  <p>
-    <b>Mac eller Linux:</b> kjør labbene her. Kommandoene på ukesidene virker uendret i PowerShell-modus.
-  </p>
 
   <h3>Vanlige feller</h3>
   <div class="table-wrap">
@@ -357,7 +360,7 @@ az account show --query "{abonnement:name, bruker:user.name}" -o table</code></p
         <tr><td><code>az account show</code> viser jobbkontoen</td><td>Kjør <code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"</code> først, og logg inn på nytt med <code>--tenant &lt;lab-tenanten&gt;</code></td></tr>
         <tr><td>Kommandoer kopiert fra Learn feiler i PowerShell</td><td>CLI-eksemplene i Learn er skrevet for bash. Bruk kommandoene på ukesiden</td></tr>
         <tr><td>En innstilling fra forrige lab slår inn</td><td>Ikke bruk <code>az configure --defaults group=…</code>. Den blir liggende i CLI-profilen. Send heller <code>-g</code> hver gang. Fjern den med <code>az configure --defaults group=''</code></td></tr>
-        <tr><td>Første deploy er treg, eller «registering for you»</td><td>Ressursleverandøren registreres første gang den brukes i abonnementet. Det er normalt</td></tr>
+        <tr><td>Første deploy er treg, eller «registering for you»</td><td>Resource provideren registreres første gang den brukes i subscriptionen. Det er normalt</td></tr>
       </tbody>
     </table>
   </div>
@@ -434,7 +437,8 @@ az account show --query "{abonnement:name, bruker:user.name}" -o table</code></p
       <ul>
         <li>Lab-kommandoene er skrevet om fra Git Bash til PowerShell, og labben i uke 1 er testkjørt på nytt.</li>
         <li>Verktøy: forskjellen på Windows PowerShell, PowerShell 7, Az-modulen og Azure CLI, og innlogging i egen CLI-profil.</li>
-        <li>Mac og Linux: labbene kjøres i Cloud Shell i PowerShell-modus.</li>
+        <li>Mac og Linux: Azure CLI i zsh eller bash, med en egen boks på ukesiden for det som skrives annerledes.</li>
+        <li>Azure-navn står på engelsk: storage account, resource group, subscription.</li>
       </ul>
     </div>
 

@@ -89,7 +89,7 @@
       <tfoot><tr><td>2 moduler</td><td class="tall">63</td><td></td></tr></tfoot>
     </table>
   </div>
-  <p class="table-note">Minuttene er Learns eget anslag. I økta bygger alle i sitt eget abonnement.</p>
+  <p class="table-note">Minuttene er Learns eget anslag. I økta bygger alle i sin egen subscription.</p>
 </section>
 
 <!-- ======================================================================
@@ -107,7 +107,7 @@
 
   <h3>Før økta</h3>
   <p>
-    Microsoft Learn har ingen sandkasse for denne modulen, så du bruker ditt eget abonnement.
+    Microsoft Learn har ingen sandkasse for denne modulen, så du bruker din egen subscription.
     To verktøy, hvert til sitt:
   </p>
   <div class="table-wrap">
@@ -142,18 +142,35 @@
   </div>
   <p>
     Logg inn med lab-brukeren i en egen CLI-profil. <code>az login</code> i den vanlige profilen
-    erstatter jobbinnloggingen din, og en deploy uten riktig kontekst kan havne i et jobbabonnement.
+    erstatter jobbinnloggingen din, og en deploy uten riktig kontekst kan havne i en jobb-subscription.
     <b>Navnet på lab-tenanten og brukernavnet ditt får du av Anders.</b>
   </p>
 <pre><code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"     <span class="kom"># egen profil for kurset, gjelder dette vinduet</span>
 az login --tenant &lt;lab-tenanten&gt;
 az account set --subscription "AZ-104 &lt;Navn&gt;"
-az account show --query "{abonnement:name, bruker:user.name}" -o table</code></pre>
+az account show --query "{subscription:name, bruker:user.name}" -o table</code></pre>
   <p>
     Du skal se <code>AZ-104 &lt;Navn&gt;</code> og brukernavnet ditt i lab-tenanten. Kjør
     <code>$env:</code>-linja på nytt i hvert nytt vindu. Jobbinnloggingen din i
     <code>$HOME\.azure</code> blir ikke rørt.
   </p>
+  <details>
+    <summary>Mac eller Linux: zsh eller bash</summary>
+    <div>
+      <p>
+        Installer Azure CLI (<code>brew install azure-cli</code> på Mac) og kjør labben i zsh eller bash.
+        <code>az</code>-kommandoene er de samme som under. To ting skrives annerledes: profilen og
+        variablene settes slik, og linjeskift er <code>\</code> i stedet for backtick.
+      </p>
+<pre><code>export AZURE_CONFIG_DIR=$HOME/.azure-az104
+RG=rg-uke01
+ST=st&lt;fornavn&gt;uke01
+today=$(date +%F)
+
+az deployment group create -g $RG --name addnameparameter-$today \
+  --template-file azuredeploy.json --parameters storageName=$ST</code></pre>
+    </div>
+  </details>
 
   <h4>Cloud Shell: Az-modulen</h4>
   <ol>
@@ -163,15 +180,10 @@ az account show --query "{abonnement:name, bruker:user.name}" -o table</code></p
     <li>Sjekk at du står riktig: <code>Get-AzContext</code></li>
   </ol>
   <p>Sesjonen lukkes etter 20 minutter uten aktivitet.</p>
-  <p>
-    <b>Mac eller Linux:</b> kjør hele labben i Cloud Shell i PowerShell-modus. Kommandoene under virker
-    uendret der. Hopp over <code>$env:</code>-linja og <code>az login</code>, for du er allerede logget inn.
-    Lag og rediger filene med <code>nano</code>. De forsvinner når sesjonen lukkes.
-  </p>
 
   <h3>Del A — ARM-mal (Learn, ca. 30 min)</h3>
   <p>
-    Sett opp ressursgruppe og variabler én gang. Lagringskontonavnet må være unikt i hele Azure og
+    Sett opp resource group og variabler én gang. Navnet på storage accounten må være unikt i hele Azure og
     bestå av 3–24 små bokstaver og tall. Ingen bindestrek, så Svein-Tore skriver <code>sveintore</code>.
   </p>
 <pre><code>$RG = "rg-uke01"
@@ -192,11 +204,11 @@ az group create --name $RG --location norwayeast</code></pre>
   </p>
 <pre><code>az deployment group create -g $RG --name blanktemplate-$today --template-file azuredeploy.json</code></pre>
   <p>
-    Portalen → ressursgruppa → <b>Deployments</b>: én vellykket deploy og ingen ressurser.
+    Portalen → resource groupen → <b>Deployments</b>: én vellykket deploy og ingen ressurser.
     Allerede her blir det en deployment-historikk.
   </p>
 
-  <h4>2. Legg til lagringskonto</h4>
+  <h4>2. Legg til storage account</h4>
   <p>
     Legg til ressursen fra Learn-enheten, men gjør <b>to</b> endringer: bytt <code>storageaccount1</code>
     med navnet du satte i <code>$ST</code>, og bytt <code>Standard_LRS</code> med <code>Standard_GRS</code>.
@@ -205,7 +217,7 @@ az group create --name $RG --location norwayeast</code></pre>
   <div class="callout warn">
     <h3>Hvorfor GRS allerede her</h3>
     Learn bytter fra LRS til GRS i steg 4. Det er en geo-konvertering, og så lenge den pågår, kan
-    ikke kontoen slettes (<code>PendingTransactionAlreadyExists</code>). I testen 29.09 var slettingen
+    ikke storage accounten slettes (<code>PendingTransactionAlreadyExists</code>). I testen 29.09 var slettingen
     blokkert i nesten en halvtime. Med GRS fra starten blir det ingen konvertering.
   </div>
 
@@ -221,7 +233,7 @@ az group create --name $RG --location norwayeast</code></pre>
 <pre><code>az deployment group create -g $RG --name addSkuParameter-$today `
   --template-file azuredeploy.json --parameters storageName=$ST storageSKU=Standard_GRS</code></pre>
   <p>
-    Kontoen er alt GRS fra steg 2, så ingenting endres. Poenget er neste kommando: kjør den samme
+    Storage accounten er alt GRS fra steg 2, så ingenting endres. Poenget er neste kommando: kjør den samme
     med <code>storageSKU=Basic</code>. Den <b>skal</b> feile. Legg merke til at feilen kommer ved
     validering, før noe endres i Azure.
   </p>
@@ -250,35 +262,35 @@ az group create --name $RG --location norwayeast</code></pre>
   </p>
 
   <h4>8. Endre Bicep-fila og deploy den</h4>
-  <p>Legg til en tagg i <code>tags</code>, f.eks. <code>uke: '1'</code>. Se hva som vil skje, og deploy:</p>
+  <p>Legg til en tag i <code>tags</code>, f.eks. <code>uke: '1'</code>. Se hva som vil skje, og deploy:</p>
 <pre><code>az deployment group what-if -g $RG --template-file azuredeploy.bicep `
   --parameters storageName=$ST storageSKU=Standard_GRS
 
 az deployment group create -g $RG --name bicep-$today --template-file azuredeploy.bicep `
   --parameters storageName=$ST storageSKU=Standard_GRS</code></pre>
   <p>
-    what-if skal vise <b>Modify</b> på lagringskontoen med den nye taggen. Prøv også å fjerne
+    what-if skal vise <b>Modify</b> på storage accounten, med den nye tag-en. Prøv også å fjerne
     <code>storageSKU=Standard_GRS</code> fra kommandoen og kjør what-if igjen. Hva skjer med SKU-en, og hvorfor?
   </p>
 
   <h4>9. Incremental mot Complete (hvis tid)</h4>
-  <p>Lag en ressurs som ikke står i malen. En nettverkssikkerhetsgruppe er gratis:</p>
+  <p>Lag en ressurs som ikke står i malen. En network security group (NSG) er gratis:</p>
 <pre><code>az network nsg create -g $RG --name nsg-utenfor-malen --location norwayeast</code></pre>
   <p>
     Første gang får du <code>Resource provider 'Microsoft.Network' ... is not registered. We are
-    registering for you.</code> Det er normalt. Leverandører registreres per abonnement, og CLI og
+    registering for you.</code> Det er normalt. Resource providers registreres per subscription, og CLI og
     malene gjør det automatisk. <code>Microsoft.Storage</code> ble registrert på samme måte i steg 2.
   </p>
 <pre><code>az deployment group what-if -g $RG --template-file azuredeploy.bicep `
   --parameters storageName=$ST storageSKU=Standard_GRS --mode Complete</code></pre>
   <p>
-    I Complete-modus sletter Azure alt i ressursgruppa som ikke står i malen, og what-if viser
+    I Complete-modus sletter Azure alt i resource groupen som ikke står i malen, og what-if viser
     <b>Delete</b> på NSG-en. Standard er Incremental, og da blir den stående. Ikke kjør Complete på
     ordentlig. Microsoft skal fase den ut og anbefaler deployment stacks i stedet.
   </p>
   <p>
-    Se også portalen → ressursgruppa → <b>Export template</b>. Det er et øyeblikksbilde av tilstanden
-    nå, med NSG-en og hardkodede verdier. Tell ressursene: du deployet én lagringskonto, men eksporten
+    Se også portalen → resource groupen → <b>Export template</b>. Det er et øyeblikksbilde av tilstanden
+    nå, med NSG-en og hardkodede verdier. Tell ressursene: du deployet én storage account, men eksporten
     tar også med blob-, file-, queue- og table-tjenestene under den. <b>Deployments → addoutputs →
     Template</b> er derimot malen slik den ble deployet.
   </p>
@@ -291,10 +303,10 @@ az deployment group create -g $RG --name bicep-$today --template-file azuredeplo
         <tr><td><code>az account show</code> viser jobbkontoen</td><td>Kjør <code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"</code> først, og deretter <code>az login --tenant &lt;lab-tenanten&gt;</code>. Da ligger kursinnloggingen for seg selv, og jobbinnloggingen blir ikke rørt</td></tr>
         <tr><td><code>StorageAccountAlreadyTaken</code></td><td>Navnet må være unikt i hele Azure. Legg til et par tall</td></tr>
         <tr><td><code>AccountNameInvalid</code></td><td>Bare små bokstaver og tall, 3–24 tegn. <code>svein-tore</code> → <code>sveintore</code></td></tr>
-        <tr><td><code>az group delete</code> ser ut til å virke, men gruppa står igjen med lagringskontoen</td><td>Kontoen er byttet fra LRS til GRS, og konverteringen pågår fortsatt (<code>PendingTransactionAlreadyExists</code> i aktivitetsloggen). Det skjer hvis du fulgte Learn-teksten i steg 2. Vent en halvtime og slett på nytt</td></tr>
+        <tr><td><code>az group delete</code> ser ut til å virke, men resource groupen står igjen med storage accounten</td><td>Storage accounten er byttet fra LRS til GRS, og konverteringen pågår fortsatt (<code>PendingTransactionAlreadyExists</code> i Activity log). Det skjer hvis du fulgte Learn-teksten i steg 2. Vent en halvtime og slett på nytt</td></tr>
         <tr><td>Feil på <code>Basic</code> i steg 4</td><td>Det skal feile. Poenget er at feilen kommer ved valideringen</td></tr>
         <tr><td><code>arm!</code> gir ingen mal</td><td>Snarveien kom fra ARM Tools, som er avviklet. Kopier skjelettet fra Learn</td></tr>
-        <tr><td>Første deploy er treg, eller «registering for you»</td><td>Ressursleverandøren registreres første gang den brukes i abonnementet. Det er normalt og skjer bare én gang</td></tr>
+        <tr><td>Første deploy er treg, eller «registering for you»</td><td>Resource provideren registreres første gang den brukes i subscriptionen. Det er normalt og skjer bare én gang</td></tr>
         <tr><td><code>code fil.json</code> virker ikke i Cloud Shell</td><td>Editoren virker bare i Classic-modus. Bruk <code>nano</code>, eller VS Code lokalt</td></tr>
         <tr><td>Learns Az PowerShell-variant finner ikke malen</td><td>Learn setter ikke <code>$templateFile</code> på nytt i de siste stegene. Variabelen må fortsatt stå fra tidligere i sesjonen</td></tr>
       </tbody>
@@ -337,12 +349,12 @@ az deployment group create -g $RG --name bicep-$today --template-file azuredeplo
 <pre><code>az group delete --name rg-uke01 --yes --no-wait
 az group list -o table</code></pre>
   <p>
-    Ressursgruppa forsvinner i løpet av et par minutter. Lagringskontoen koster nesten ingenting,
+    Resource groupen forsvinner i løpet av et par minutter. Storage accounten koster nesten ingenting,
     men vi rydder hver gang.
   </p>
   <p>
-    Står den igjen etterpå, se i aktivitetsloggen. <code>PendingTransactionAlreadyExists</code> betyr at
-    kontoen har vært byttet fra LRS til GRS (se steg 2). Vent en halvtime og kjør <code>az group delete</code> på nytt.
+    Står den igjen etterpå, se i Activity log. <code>PendingTransactionAlreadyExists</code> betyr at
+    storage accounten har vært byttet fra LRS til GRS (se steg 2). Vent en halvtime og kjør <code>az group delete</code> på nytt.
   </p>
 </section>
 
