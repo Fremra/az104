@@ -1,0 +1,346 @@
+/* ==========================================================================
+   AZ-104 · felles stilark for alle sidene
+   Tokens og komponenter fra Fremra/rotterdam2026, som igjen har dem fra
+   FremraOperations/FremraOperations.Web/wwwroot/css/style.css
+   ========================================================================== */
+
+/* Fonts — samme selvhostede snitt som Fremra Operations */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('fonts/inter-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Ovo';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/ovo-latin.woff2') format('woff2');
+}
+
+/* ==========================================================================
+   Design tokens
+   ========================================================================== */
+:root {
+  --brand: #eb4f34;
+  --brand-hover: #d44329;
+  --brand-gradient: linear-gradient(135deg, #eb4f34 0%, #c0392b 100%);
+  --brand-shadow: rgba(235, 79, 52, 0.35);
+  --brand-focus: rgba(235, 79, 52, 0.15);
+  --brand-tint: #fff4f1;
+
+  --text: #1a1a1a;
+  --text-secondary: #555;
+  --text-muted: #888;
+  --text-light: #aaa;
+
+  --bg: #f5f5f5;
+  --surface: #fff;
+  --surface-alt: #f9f9f9;
+  --bg-hover: #e5e7eb;
+
+  --border: #ddd;
+  --border-light: #eee;
+  --border-mid: #ccc;
+
+  --success-bg: #dcfce7;
+  --success-border: #bbf7d0;
+  --success-text: #166534;
+  --warning-bg: #fefce8;
+  --warning-border: #fde68a;
+  --warning-text: #713f12;
+  --completed-bg: #e0f0ff;
+  --completed-text: #1e40af;
+
+  --code-bg: #1e1e1e;
+  --code-text: #e6e6e6;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Ovo', Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  padding: 1rem;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; }
+
+/* ==========================================================================
+   Header
+   ========================================================================== */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 2px solid var(--brand);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 100;
+  padding-top: 0.6rem;
+}
+.header-brand { display: flex; align-items: center; gap: 0.6rem; color: inherit; text-decoration: none; }
+.logo-svg { height: 30px; width: auto; display: block; }
+.header-wordmark {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  line-height: 1;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border-mid);
+  user-select: none;
+}
+nav.top { display: flex; gap: 0.4rem 1rem; flex-wrap: wrap; font-size: 0.85rem; }
+nav.top a { color: var(--brand); text-decoration: none; }
+nav.top a:hover { text-decoration: underline; }
+
+/* ==========================================================================
+   Typografi
+   ========================================================================== */
+h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(1.9rem, 6vw, 2.7rem);
+  line-height: 1.15;
+  margin-bottom: 0.4rem;
+}
+h2 {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 400;
+  margin-bottom: 0.3rem;
+}
+h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.4rem; }
+h4 { font-size: 0.95rem; font-weight: 600; margin: 1.2rem 0 0.35rem; }
+p { margin-bottom: 0.75rem; }
+p:last-child { margin-bottom: 0; }
+a { color: var(--brand); }
+ul, ol { margin: 0 0 0.75rem 1.2rem; }
+li { margin-bottom: 0.25rem; }
+section { margin-bottom: 3rem; scroll-margin-top: 5.5rem; }
+.section-lead { color: var(--text-secondary); font-size: 0.92rem; margin-bottom: 1.25rem; }
+.eyebrow {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.35rem;
+}
+.muted { color: var(--text-secondary); }
+.nowrap { white-space: nowrap; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-hover);
+  padding: 0.05em 0.3em;
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+pre {
+  position: relative;
+  background: var(--code-bg);
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 2.1rem 1rem 0.85rem; /* plass til kopier-knappen over første linje */
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+pre code { background: none; padding: 0; font-size: inherit; color: inherit; overflow-wrap: normal; }
+pre .kom { color: #8a9a7b; }
+.kopier {
+  position: absolute; top: 0.4rem; right: 0.4rem;
+  font: inherit; font-family: var(--font-sans); font-size: 0.7rem; cursor: pointer;
+  background: #333; color: #ddd; border: 1px solid #555; border-radius: var(--radius-sm);
+  padding: 0.1rem 0.5rem;
+}
+.kopier:hover { border-color: var(--brand); color: #fff; }
+
+/* ==========================================================================
+   Hero og faktakort
+   ========================================================================== */
+.hero { margin-bottom: 2.5rem; }
+.hero .lead { font-size: 1.05rem; color: var(--text-secondary); max-width: 46rem; }
+.hero .dates {
+  display: inline-block;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand-gradient);
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px var(--brand-shadow);
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-top: 1.5rem; }
+.fact {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+}
+.fact .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-weight: 700; }
+.fact .v { font-size: 1.05rem; font-weight: 600; margin-top: 0.15rem; }
+.fact .s { font-size: 0.8rem; color: var(--text-secondary); }
+
+.crumb { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.crumb a { color: var(--text-muted); }
+
+/* Neste økt */
+.neste {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--brand);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  margin-top: 1.5rem;
+}
+.neste .nar { font-family: var(--font-serif); font-size: 1.35rem; line-height: 1.2; margin-bottom: 0.2rem; }
+.neste .tema { font-weight: 600; }
+.neste p { margin: 0.4rem 0 0.8rem; font-size: 0.92rem; color: var(--text-secondary); }
+
+/* ==========================================================================
+   Kort, callouts og knapper
+   ========================================================================== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+.callout {
+  border: 1px solid;
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.callout h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.3rem; }
+.callout.warn { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
+.callout.info { background: var(--completed-bg); border-color: #bfdbfe; color: var(--completed-text); }
+.callout.ok { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+.callout ul { margin: 0.4rem 0 0 1.1rem; }
+.callout li { margin-bottom: 0.3rem; }
+.callout code { background: rgba(0, 0, 0, 0.06); }
+
+.btn-lenke {
+  display: inline-block; background: var(--brand-gradient); color: #fff; text-decoration: none;
+  font-weight: 600; font-size: 0.95rem; padding: 0.55rem 1.1rem; border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px var(--brand-shadow); margin: 0.2rem 0.4rem 0.2rem 0;
+}
+.btn-lenke:hover { filter: brightness(0.94); }
+.btn-lenke.sekundaer {
+  background: var(--surface); color: var(--brand); box-shadow: none;
+  border: 1px solid var(--brand);
+}
+.btn-lenke.sekundaer:hover { background: var(--brand-tint); filter: none; }
+
+/* ==========================================================================
+   Tabeller
+   ========================================================================== */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+thead { border-bottom: 2px solid var(--border); }
+th { text-align: left; padding: 0.55rem 0.75rem; font-weight: 600; white-space: nowrap; }
+td { padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tfoot td { border-top: 2px solid var(--border); border-bottom: none; font-weight: 600; }
+td.note { color: var(--text-secondary); font-size: 0.85rem; }
+td.tall, th.tall { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-note { font-size: 0.85rem; color: var(--text-secondary); margin: -0.4rem 0 1rem; }
+.pill {
+  display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; padding: 0.05rem 0.45rem; border-radius: 999px;
+  white-space: nowrap; vertical-align: 1px; margin-left: 0.3rem;
+}
+.pill.neste-pill { background: var(--brand); color: #fff; }
+.pill.klar { background: var(--success-bg); color: var(--success-text); }
+tr.er-neste td { background: var(--brand-tint); }
+.pill.neste-pill { display: none; }
+tr.er-neste .pill.neste-pill { display: inline-block; }
+
+/* ==========================================================================
+   Kunnskapssjekk og nedlasting
+   ========================================================================== */
+details {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 0.6rem;
+}
+details > summary { cursor: pointer; padding: 0.65rem 0.9rem; font-weight: 600; font-size: 0.92rem; }
+details > div { padding: 0 0.9rem 0.8rem; font-size: 0.92rem; color: var(--text-secondary); }
+
+.nedlast { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.8rem; }
+
+/* Bla mellom ukene */
+.pager {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  font-size: 0.9rem; margin: -1rem 0 2rem;
+}
+.pager a { text-decoration: none; }
+.pager a:hover { text-decoration: underline; }
+
+/* ==========================================================================
+   Endringslogg
+   ========================================================================== */
+.log { border-left: 2px solid var(--border); padding-left: 1.1rem; }
+.log-entry { position: relative; padding-bottom: 1.4rem; }
+.log-entry:last-child { padding-bottom: 0; }
+.log-entry::before {
+  content: ''; position: absolute; left: calc(-1.1rem - 5px); top: 0.45rem;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--brand);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+.log-entry.older::before { background: var(--border-mid); }
+.log-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
+.log-head .ver { font-weight: 700; font-size: 0.9rem; }
+.log-head .date { font-size: 0.8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.log-entry ul { margin-left: 1.1rem; font-size: 0.9rem; color: var(--text-secondary); }
+.log-entry li { margin-bottom: 0.2rem; }
+
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+footer {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+}
+footer a { color: var(--text-muted); }
+
+@media (max-width: 620px) {
+  body { padding: 0.75rem; }
+  header { position: static; }
+  .header-wordmark { font-size: 1.1rem; }
+  .m-skjul { display: none; }
+  th, td { padding-left: 0.55rem; padding-right: 0.55rem; }
+}
+
+@media print {
+  body { background: #fff; padding: 0; }
+  header { position: static; }
+  nav.top, .no-print, .kopier, .pager { display: none; }
+  .card, .fact, .table-wrap, details { break-inside: avoid; }
+  pre { white-space: pre-wrap; }
+}
