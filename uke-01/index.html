@@ -185,9 +185,11 @@ az deployment group create -g $RG --name addnameparameter-$today \
   <p>
     Sett opp resource group og variabler én gang. Navnet på storage accounten må være unikt i hele Azure og
     bestå av 3–24 små bokstaver og tall. Ingen bindestrek, så Svein-Tore skriver <code>sveintore</code>.
+    Vi setter det sammen av <code>st</code> (for storage account), fornavnet ditt og <code>uke01</code>.
+    Olav får altså <code>st</code> + <code>olav</code> + <code>uke01</code> = <code>stolavuke01</code>.
   </p>
 <pre><code>$RG = "rg-uke01"
-$ST = "st&lt;fornavn&gt;uke01"       <span class="kom"># f.eks. stolavuke01. Legg til tall hvis det er tatt</span>
+$ST = "st&lt;fornavn&gt;uke01"       <span class="kom"># legg til tall hvis navnet er tatt</span>
 $today = Get-Date -Format "yyyy-MM-dd"
 az group create --name $RG --location norwayeast</code></pre>
   <p>Variablene gjelder bare dette vinduet. Åpner du et nytt, setter du dem på nytt.</p>
