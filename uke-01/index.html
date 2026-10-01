@@ -183,6 +183,10 @@ az deployment group create -g $RG --name addnameparameter-$today \
 
   <h3>Del A — ARM-mal (Learn, ca. 30 min)</h3>
   <p>
+    Ha Learn-øvelsen åpen ved siden av. Learn forklarer hva som skal inn i malen. Kommandoene tar du
+    herfra, for Learns er skrevet for bash.
+  </p>
+  <p>
     Sett opp resource group og variabler én gang. Navnet på storage accounten må være unikt i hele Azure og
     bestå av 3–24 små bokstaver og tall. Ingen bindestrek, så Svein-Tore skriver <code>sveintore</code>.
     Vi setter det sammen av <code>st</code> (for storage account), fornavnet ditt og <code>uke01</code>.
@@ -201,13 +205,40 @@ az group create --name $RG --location norwayeast</code></pre>
 
   <h4>1. Tom mal</h4>
   <p>
-    Lag <code>azuredeploy.json</code> med det tomme skjelettet fra Learn-enheten. <code>arm!</code>-snarveien
-    fra gamle guider kom fra ARM Tools og virker ikke uten den. Deploy malen:
+    Du lager den minste malen som finnes, og deployer den. Poenget er å se at en mal uten ressurser
+    også er en gyldig deploy. Steget er første del av Learn-øvelsen
+    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/3-exercise-create-and-deploy-template/">Create and deploy an Azure Resource Manager template</a>.
   </p>
+  <p>
+    Lag en mappe til labben og åpne den i VS Code. Bli i det samme vinduet, for variablene dine ligger der.
+  </p>
+<pre><code>mkdir uke-01
+cd uke-01
+code .</code></pre>
+  <p>
+    Virker ikke <code>code</code>, åpner du mappa fra VS Code med <b>File → Open Folder</b>.
+    Lag så en ny fil med navnet <code>azuredeploy.json</code>, lim inn skjelettet under og lagre.
+    Learn ber deg skrive <code>arm!</code> for å få det fram, men den snarveien virker ikke lenger.
+  </p>
+<pre><code>{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {},
+  "functions": [],
+  "variables": {},
+  "resources": [],
+  "outputs": {}
+}</code></pre>
+  <p>
+    <code>$schema</code>, <code>contentVersion</code> og <code>resources</code> er påkrevd. Resten er valgfritt
+    og står tomt til vi trenger det: ressursen kommer i steg 2, parameterne i steg 3–4 og output i steg 5.
+  </p>
+  <p>Deploy malen fra PowerShell-vinduet:</p>
 <pre><code>az deployment group create -g $RG --name blanktemplate-$today --template-file azuredeploy.json</code></pre>
   <p>
-    Portalen → resource groupen → <b>Deployments</b>: én vellykket deploy og ingen ressurser.
-    Allerede her blir det en deployment-historikk.
+    Kommandoen svarer med en lang JSON. <code>"provisioningState": "Succeeded"</code> betyr at det gikk bra.
+    Se så i portalen under resource groupen → <b>Deployments</b>. Der ligger én vellykket deploy og ingen
+    ressurser. Azure fører altså historikk over hver deploy, også en tom en.
   </p>
 
   <h4>2. Legg til storage account</h4>
