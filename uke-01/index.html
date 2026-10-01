@@ -76,15 +76,15 @@
 
   <h3>Microsoft Learn · i økta</h3>
   <p>
-    Læringsstien <a href="https://learn.microsoft.com/en-us/training/paths/az-104-administrator-prerequisites/">AZ-104: Prerequisites for Azure administrators</a>, modul 1–2.
+    Læringsstien <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/paths/az-104-administrator-prerequisites/">AZ-104: Prerequisites for Azure administrators</a>, modul 1–2.
     Vi gjør modulene sammen, og temaeieren har kjørt dem gjennom på forhånd. Les gjerne gjennom dem før økta.
   </p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Modul</th><th class="tall">Min</th><th class="tall">Øvelser</th></tr></thead>
       <tbody>
-        <tr><td><a href="https://learn.microsoft.com/en-us/training/modules/intro-to-azure-cloud-shell/">Introduction to Azure Cloud Shell</a></td><td class="tall">20</td><td class="tall">–</td></tr>
-        <tr><td><a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/">Deploy Azure infrastructure by using JSON ARM templates</a></td><td class="tall">43</td><td class="tall">2</td></tr>
+        <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/intro-to-azure-cloud-shell/">Introduction to Azure Cloud Shell</a></td><td class="tall">20</td><td class="tall">–</td></tr>
+        <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/">Deploy Azure infrastructure by using JSON ARM templates</a></td><td class="tall">43</td><td class="tall">2</td></tr>
       </tbody>
       <tfoot><tr><td>2 moduler</td><td class="tall">63</td><td></td></tr></tfoot>
     </table>
@@ -100,7 +100,7 @@
   <h2>ARM-mal og Bicep</h2>
   <p class="section-lead">
     Del A er øvelsene i Learn-modulen
-    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/">Deploy Azure infrastructure by using JSON ARM templates</a>.
+    <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/">Deploy Azure infrastructure by using JSON ARM templates</a>.
     Del B tar den samme malen over i Bicep. Planen sier at alle labber skal bygges med Bicep,
     og det begynner her. Fasiten ligger <a href="#fasit">under labben</a>.
   </p>
@@ -210,7 +210,7 @@ az group create --name $RG --location norwayeast</code></pre>
   </p>
   <p>
     Steg 1 og 2 følger Learn-øvelsen
-    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/3-exercise-create-and-deploy-template">Create and deploy an Azure Resource Manager template</a>.
+    <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/3-exercise-create-and-deploy-template">Create and deploy an Azure Resource Manager template</a>.
   </p>
   <p>
     Lag en mappe til labben og åpne den i VS Code. Bli i det samme vinduet, for variablene dine ligger der.
@@ -221,7 +221,6 @@ code .</code></pre>
   <p>
     Virker ikke <code>code</code>, åpner du mappa fra VS Code med <b>File → Open Folder</b>.
     Lag så en ny fil med navnet <code>azuredeploy.json</code>, lim inn skjelettet under og lagre.
-    Learn ber deg skrive <code>arm!</code> for å få det fram, men den snarveien virker ikke lenger.
   </p>
 <pre><code>{
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -251,15 +250,34 @@ code .</code></pre>
     og Resource Manager sørger for at det blir slik.
   </p>
   <p>
-    Legg til storage account-ressursen fra Learn-øvelsen under <code>resources</code>, men gjør <b>to</b> endringer: bytt <code>storageaccount1</code>
-    med navnet du satte i <code>$ST</code>, og bytt <code>Standard_LRS</code> med <code>Standard_GRS</code>.
+    Bytt ut <code>"resources": [],</code> i malen med blokken under. Den er lik Learns, med <b>to</b> endringer:
+    navnet er ditt eget i stedet for <code>storageaccount1</code>, og SKU-en er <code>Standard_GRS</code> i stedet
+    for <code>Standard_LRS</code>. Skriv inn det samme navnet som du satte i <code>$ST</code>, begge steder.
   </p>
+<pre><code>  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2025-01-01",
+      "name": "st&lt;fornavn&gt;uke01",
+      "tags": {
+        "displayName": "st&lt;fornavn&gt;uke01"
+      },
+      "location": "[resourceGroup().location]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_GRS"
+      }
+    }
+  ],</code></pre>
+  <p>Lagre fila og deploy:</p>
 <pre><code>az deployment group create -g $RG --name addstorage-$today --template-file azuredeploy.json</code></pre>
   <div class="callout warn">
     <h3>Hvorfor GRS allerede her</h3>
-    Learn bytter fra LRS til GRS i steg 4. Det er en geo-konvertering, og så lenge den pågår, kan
-    ikke storage accounten slettes (<code>PendingTransactionAlreadyExists</code>). I testen 29.09 var slettingen
-    blokkert i nesten en halvtime. Med GRS fra starten blir det ingen konvertering.
+    Learn oppretter storage accounten som <code>Standard_LRS</code> her, og deployer den på nytt med
+    <code>storageSKU=Standard_GRS</code> i steg 4. Det byttet er en geo-konvertering, og så lenge den pågår,
+    kan ikke storage accounten slettes. <code>az group delete</code> i oppryddingen ser da ut til å virke,
+    men resource groupen blir stående, med <code>PendingTransactionAlreadyExists</code> i Activity log.
+    I testen 29.09 var slettingen blokkert i nesten en halvtime. Med GRS fra starten blir det ingen konvertering.
   </div>
 
   <h4>3. Parameter for navnet</h4>
@@ -269,9 +287,25 @@ code .</code></pre>
   </p>
   <p>
     Steg 3–5 følger Learn-øvelsen
-    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/5-exercise-parameters-output">Add parameters and outputs to your Azure Resource Manager template</a>.
-    Legg til parameteren <code>storageName</code> slik Learn viser, og deploy:
+    <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/5-exercise-parameters-output">Add parameters and outputs to your Azure Resource Manager template</a>.
+    Bytt ut <code>"parameters": {},</code> i malen med dette:
   </p>
+<pre><code>  "parameters": {
+    "storageName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "metadata": {
+        "description": "The name of the Azure storage resource"
+      }
+    }
+  },</code></pre>
+  <p>Bruk så parameteren i ressursen, i stedet for navnet du skrev inn i steg 2:</p>
+<pre><code>      "name": "[parameters('storageName')]",
+      "tags": {
+        "displayName": "[parameters('storageName')]"
+      },</code></pre>
+  <p>Lagre fila og deploy. Navnet gir du nå i kommandoen:</p>
 <pre><code>az deployment group create -g $RG --name addnameparameter-$today `
   --template-file azuredeploy.json --parameters storageName=$ST</code></pre>
   <p>
@@ -285,6 +319,28 @@ code .</code></pre>
     <code>defaultValue</code> gjør parameteren valgfri. En verdi utenfor lista stoppes ved valideringen,
     før noe endres i Azure.
   </p>
+  <p>
+    Legg til en parameter til i <code>parameters</code>, etter <code>storageName</code>. Husk komma mellom de to.
+  </p>
+<pre><code>    "storageSKU": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Standard_ZRS",
+        "Premium_LRS",
+        "Premium_ZRS",
+        "Standard_GZRS",
+        "Standard_RAGZRS"
+      ]
+    }</code></pre>
+  <p>Bruk den i ressursen, i stedet for <code>Standard_GRS</code>:</p>
+<pre><code>      "sku": {
+        "name": "[parameters('storageSKU')]"
+      }</code></pre>
+  <p>Lagre fila og deploy:</p>
 <pre><code>az deployment group create -g $RG --name addSkuParameter-$today `
   --template-file azuredeploy.json --parameters storageName=$ST storageSKU=Standard_GRS</code></pre>
   <p>
@@ -298,6 +354,14 @@ code .</code></pre>
     <b>Hvorfor:</b> noen verdier finnes først når ressursen er opprettet, som endepunktene til storage
     accounten. Output gir dem tilbake fra deployen, så et skript eller en annen mal kan bruke dem.
   </p>
+  <p>Bytt ut <code>"outputs": {}</code> nederst i malen med dette:</p>
+<pre><code>  "outputs": {
+    "storageEndpoint": {
+      "type": "object",
+      "value": "[reference(parameters('storageName')).primaryEndpoints]"
+    }
+  }</code></pre>
+  <p>Lagre fila og deploy:</p>
 <pre><code>az deployment group create -g $RG --name addoutputs-$today `
   --template-file azuredeploy.json --parameters storageName=$ST storageSKU=Standard_GRS `
   --query properties.outputs</code></pre>
