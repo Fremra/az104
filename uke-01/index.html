@@ -388,10 +388,17 @@ code .</code></pre>
   </p>
 <pre><code>az bicep decompile --file azuredeploy.json</code></pre>
   <p>
-    Du får <code>azuredeploy.bicep</code>. Sammenlign med <a href="main.bicep">main.bicep</a> i fasiten.
+    Du får <code>azuredeploy.bicep</code>. Åpne den ved siden av <code>azuredeploy.json</code> og sammenlign
+    de to. Det er samme mal i to språk, og Bicep-fila er klart kortere.
+  </p>
+  <p>
     Se på siste linje, <code>output</code>. I JSON sto det
     <code>[reference(parameters('storageName')).primaryEndpoints]</code>. Hva står det i Bicep, og hva
     peker <code>storage</code> på?
+  </p>
+  <p>
+    <a href="main.bicep">main.bicep</a> i fasiten er bare til kontroll. Er fila di lik den, gikk
+    konverteringen som den skulle.
   </p>
 
   <h4>8. Endre Bicep-fila og deploy den</h4>
