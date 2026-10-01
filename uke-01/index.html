@@ -205,9 +205,12 @@ az group create --name $RG --location norwayeast</code></pre>
 
   <h4>1. Tom mal</h4>
   <p>
-    Du lager den minste malen som finnes, og deployer den. Poenget er å se at en mal uten ressurser
-    også er en gyldig deploy. Steget er første del av Learn-øvelsen
-    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/3-exercise-create-and-deploy-template/">Create and deploy an Azure Resource Manager template</a>.
+    <b>Hvorfor:</b> for å se hva en mal består av før det er noe i den, og for å få bekreftet at innlogging,
+    resource group og verktøy virker. En mal uten ressurser er også en gyldig deploy.
+  </p>
+  <p>
+    Steg 1 og 2 følger Learn-øvelsen
+    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/3-exercise-create-and-deploy-template">Create and deploy an Azure Resource Manager template</a>.
   </p>
   <p>
     Lag en mappe til labben og åpne den i VS Code. Bli i det samme vinduet, for variablene dine ligger der.
@@ -243,7 +246,12 @@ code .</code></pre>
 
   <h4>2. Legg til storage account</h4>
   <p>
-    Legg til ressursen fra Learn-enheten, men gjør <b>to</b> endringer: bytt <code>storageaccount1</code>
+    <b>Hvorfor:</b> for å se hvordan én ressurs beskrives i en mal: <code>type</code>, <code>apiVersion</code>,
+    <code>name</code>, <code>location</code>, <code>kind</code> og <code>sku</code>. Malen sier hva som skal finnes,
+    og Resource Manager sørger for at det blir slik.
+  </p>
+  <p>
+    Legg til storage account-ressursen fra Learn-øvelsen under <code>resources</code>, men gjør <b>to</b> endringer: bytt <code>storageaccount1</code>
     med navnet du satte i <code>$ST</code>, og bytt <code>Standard_LRS</code> med <code>Standard_GRS</code>.
   </p>
 <pre><code>az deployment group create -g $RG --name addstorage-$today --template-file azuredeploy.json</code></pre>
@@ -255,6 +263,15 @@ code .</code></pre>
   </div>
 
   <h4>3. Parameter for navnet</h4>
+  <p>
+    <b>Hvorfor:</b> navnet står hardkodet i malen, så den kan bare brukes én gang. Med en parameter kan
+    samme mal brukes av alle, med hvert sitt navn. Verdien gis når du deployer.
+  </p>
+  <p>
+    Steg 3–5 følger Learn-øvelsen
+    <a href="https://learn.microsoft.com/en-us/training/modules/create-azure-resource-manager-template-vs-code/5-exercise-parameters-output">Add parameters and outputs to your Azure Resource Manager template</a>.
+    Legg til parameteren <code>storageName</code> slik Learn viser, og deploy:
+  </p>
 <pre><code>az deployment group create -g $RG --name addnameparameter-$today `
   --template-file azuredeploy.json --parameters storageName=$ST</code></pre>
   <p>
@@ -263,6 +280,11 @@ code .</code></pre>
   </p>
 
   <h4>4. Parameter for SKU, med <code>allowedValues</code></h4>
+  <p>
+    <b>Hvorfor:</b> <code>allowedValues</code> begrenser hva den som deployer, kan velge, og
+    <code>defaultValue</code> gjør parameteren valgfri. En verdi utenfor lista stoppes ved valideringen,
+    før noe endres i Azure.
+  </p>
 <pre><code>az deployment group create -g $RG --name addSkuParameter-$today `
   --template-file azuredeploy.json --parameters storageName=$ST storageSKU=Standard_GRS</code></pre>
   <p>
@@ -272,6 +294,10 @@ code .</code></pre>
   </p>
 
   <h4>5. Output</h4>
+  <p>
+    <b>Hvorfor:</b> noen verdier finnes først når ressursen er opprettet, som endepunktene til storage
+    accounten. Output gir dem tilbake fra deployen, så et skript eller en annen mal kan bruke dem.
+  </p>
 <pre><code>az deployment group create -g $RG --name addoutputs-$today `
   --template-file azuredeploy.json --parameters storageName=$ST storageSKU=Standard_GRS `
   --query properties.outputs</code></pre>
@@ -280,6 +306,10 @@ code .</code></pre>
   <h3>Del B — Bicep (ca. 25 min)</h3>
 
   <h4>6. Kjør samme mal på nytt, med what-if</h4>
+  <p>
+    <b>Hvorfor:</b> for å se at en mal trygt kan kjøres flere ganger. what-if viser hva en deploy ville
+    endret, uten å gjøre det.
+  </p>
 <pre><code>az deployment group what-if -g $RG --template-file azuredeploy.json `
   --parameters storageName=$ST storageSKU=Standard_GRS</code></pre>
   <p>
@@ -288,6 +318,10 @@ code .</code></pre>
   </p>
 
   <h4>7. Gjør ARM om til Bicep</h4>
+  <p>
+    <b>Hvorfor:</b> Bicep er samme mal i en enklere syntaks. Studieguiden ber deg kunne gjøre en ARM-mal
+    om til en Bicep-fil, og dette er kommandoen for det.
+  </p>
 <pre><code>az bicep decompile --file azuredeploy.json</code></pre>
   <p>
     Du får <code>azuredeploy.bicep</code>. Sammenlign med <a href="main.bicep">main.bicep</a> i fasiten.
@@ -295,6 +329,10 @@ code .</code></pre>
   </p>
 
   <h4>8. Endre Bicep-fila og deploy den</h4>
+  <p>
+    <b>Hvorfor:</b> studieguiden ber deg kunne endre en eksisterende Bicep-fil. Her ser du også hva en
+    deploy gjør med en ressurs som finnes fra før.
+  </p>
   <p>Legg til en tag i <code>tags</code>, f.eks. <code>uke: '1'</code>. Se hva som vil skje, og deploy:</p>
 <pre><code>az deployment group what-if -g $RG --template-file azuredeploy.bicep `
   --parameters storageName=$ST storageSKU=Standard_GRS
@@ -307,6 +345,10 @@ az deployment group create -g $RG --name bicep-$today --template-file azuredeplo
   </p>
 
   <h4>9. Incremental mot Complete (hvis tid)</h4>
+  <p>
+    <b>Hvorfor:</b> de to deployment-modusene behandler ressurser utenfor malen helt ulikt. Her ser du
+    forskjellen uten å slette noe, fordi what-if bare viser hva Complete ville fjernet.
+  </p>
   <p>Lag en ressurs som ikke står i malen. En network security group (NSG) er gratis:</p>
 <pre><code>az network nsg create -g $RG --name nsg-utenfor-malen --location norwayeast</code></pre>
   <p>
