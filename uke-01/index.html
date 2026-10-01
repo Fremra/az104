@@ -188,7 +188,7 @@ az deployment group create -g $RG --name addnameparameter-$today \
   </p>
   <p>
     Sett opp resource group og variabler én gang. Navnet på storage accounten må være unikt i hele Azure og
-    bestå av 3–24 små bokstaver og tall. Ingen bindestrek, så Svein-Tore skriver <code>sveintore</code>.
+    bestå av 3–24 små bokstaver og tall. Ingen bindestrek, selv om Learn-teksten sier at det er lov. Svein-Tore skriver <code>sveintore</code>.
     Vi setter det sammen av <code>st</code> (for storage account), fornavnet ditt og <code>uke01</code>.
     Olav får altså <code>st</code> + <code>olav</code> + <code>uke01</code> = <code>stolavuke01</code>.
   </p>
@@ -389,7 +389,9 @@ code .</code></pre>
 <pre><code>az bicep decompile --file azuredeploy.json</code></pre>
   <p>
     Du får <code>azuredeploy.bicep</code>. Sammenlign med <a href="main.bicep">main.bicep</a> i fasiten.
-    Hvordan ble <code>[reference(parameters('storageName')).primaryEndpoints]</code> seende ut i Bicep?
+    Se på siste linje, <code>output</code>. I JSON sto det
+    <code>[reference(parameters('storageName')).primaryEndpoints]</code>. Hva står det i Bicep, og hva
+    peker <code>storage</code> på?
   </p>
 
   <h4>8. Endre Bicep-fila og deploy den</h4>
