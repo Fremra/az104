@@ -396,10 +396,6 @@ code .</code></pre>
     <code>[reference(parameters('storageName')).primaryEndpoints]</code>. Hva står det i Bicep, og hva
     peker <code>storage</code> på?
   </p>
-  <p>
-    <a href="main.bicep">main.bicep</a> i fasiten er bare til kontroll. Er fila di lik den, gikk
-    konverteringen som den skulle.
-  </p>
 
   <h4>8. Endre Bicep-fila og deploy den</h4>
   <p>
@@ -425,8 +421,8 @@ az deployment group create -g $RG --name bicep-$today --template-file azuredeplo
   <p>Lag en ressurs som ikke står i malen. En network security group (NSG) er gratis:</p>
 <pre><code>az network nsg create -g $RG --name nsg-utenfor-malen --location norwayeast</code></pre>
   <p>
-    Første gang får du <code>Resource provider 'Microsoft.Network' ... is not registered. We are
-    registering for you.</code> Det er normalt. Resource providers registreres per subscription, og CLI og
+    Har ingen brukt nettverk i subscriptionen før, får du <code>Resource provider 'Microsoft.Network' ...
+    is not registered. We are registering for you.</code> Det er normalt. Resource providers registreres per subscription, og CLI og
     malene gjør det automatisk. <code>Microsoft.Storage</code> ble registrert på samme måte i steg 2.
   </p>
 <pre><code>az deployment group what-if -g $RG --template-file azuredeploy.bicep `
