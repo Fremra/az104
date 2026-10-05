@@ -392,9 +392,17 @@ code .</code></pre>
     de to. Det er samme mal i to språk, og Bicep-fila er klart kortere.
   </p>
   <p>
-    Se på siste linje, <code>output</code>. I JSON sto det
-    <code>[reference(parameters('storageName')).primaryEndpoints]</code>. Hva står det i Bicep, og hva
-    peker <code>storage</code> på?
+    Se på linja som begynner med <code>resource</code>. <code>storage</code> er et kallenavn som
+    <code>decompile</code> har laget av <code>storageName</code>. Det brukes bare inne i fila, f.eks. i
+    <code>output</code> nederst. Navnet i Azure er fortsatt <code>storageName</code>.
+  </p>
+  <p>
+    Sett markøren på <code>storage</code>, trykk F2 og gi det et annet navn. Kjør så what-if mot Bicep-fila:
+  </p>
+<pre><code>az deployment group what-if -g $RG --template-file azuredeploy.bicep `
+  --parameters storageName=$ST storageSKU=Standard_GRS</code></pre>
+  <p>
+    Du skal få <b>NoChange</b>, fordi kallenavnet aldri kommer fram til Azure.
   </p>
 
   <h4>8. Endre Bicep-fila og deploy den</h4>
