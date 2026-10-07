@@ -303,8 +303,8 @@ az ad user get-member-groups --id $CHRIS --query "[].displayName" -o tsv</code><
 @description('Object-id-en til gruppen som skal ha rollen')
 param groupId string
 
-@description('Reader. Id-en til en innebygd rolle er den samme i alle tenanter')
-param roleDefinitionId string = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+@description('Id-en til rollen, f.eks. Reader')
+param roleDefinitionId string
 
 resource readerForGroup 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, groupId, roleDefinitionId)
@@ -315,14 +315,15 @@ resource readerForGroup 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 '@ | Set-Content main.bicep -Encoding utf8</code></pre>
-<pre><code>az group create --name $RG --location norwayeast
-az deployment group what-if -g $RG --template-file main.bicep --parameters groupId=$GRUPPE
-az deployment group create -g $RG --name rbac --template-file main.bicep --parameters groupId=$GRUPPE</code></pre>
+<pre><code>$READER = az role definition list --name Reader --query "[0].name" -o tsv
+az group create --name $RG --location norwayeast
+az deployment group what-if -g $RG --template-file main.bicep --parameters groupId=$GRUPPE roleDefinitionId=$READER
+az deployment group create -g $RG --name rbac --template-file main.bicep --parameters groupId=$GRUPPE roleDefinitionId=$READER</code></pre>
   <p>
     what-if viser <b>Create</b> på én roleAssignment. Kjør what-if én gang til etter deployen. Nå skal den vise
     <b>Nochange</b>. Navnet på en rolletildeling må være en GUID, og <code>guid()</code> lager den samme hver
-    gang ut fra de samme verdiene. Det er derfor deployen kan kjøres på nytt uten å feile. Finn rolle-id-er
-    med <code>az role definition list --name Reader --query "[].name" -o tsv</code>.
+    gang ut fra de samme verdiene. Det er derfor deployen kan kjøres på nytt uten å feile. Id-en til en
+    innebygd rolle er den samme i alle tenanter. Se på <code>$READER</code>.
   </p>
 
   <h4>8. Tolk tilgangen</h4>
