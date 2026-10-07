@@ -32,6 +32,7 @@
     <a href="../#ukeplan">← Alle uker</a>
     <a href="#forberedelse">Forberedelse</a>
     <a href="#lab">Lab</a>
+    <a href="#fasit">Fasit</a>
     <a href="#kunnskapssjekk">Kunnskapssjekk</a>
     <a href="#opprydding">Opprydding</a>
   </nav>
@@ -95,10 +96,292 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>Brukere, grupper og RBAC</h2>
+  <p class="section-lead">
+    Learn-øvelsene i <i>Create, configure, and manage identities</i> foregår i portalen og dekker bare en
+    del av studieguiden. Her gjør vi det samme, og mer, med <code>az</code>, og vi sjekker resultatet i portalen.
+    Del A er Entra ID: brukere, grupper, lisenser og gjester. Del B er RBAC i Bicep. Fasiten ligger
+    <a href="#fasit">under labben</a>.
+  </p>
+
+  <div class="callout warn">
+    <b>Alle deler én tenant.</b> Subscriptionen er din, men brukere og grupper havner i den samme katalogen
+    som alle andre sine. Derfor starter alt du lager, med fornavnet ditt, og du rører bare dine egne objekter.
+    Du har rollen User Administrator i tenanten denne uka og neste.
+  </div>
+
+  <h3>Før møtet</h3>
+  <p>
+    Labben er bare <code>az</code>-kommandoer, så den virker både lokalt og i Cloud Shell. Velg ett av dem.
+  </p>
+  <p>
+    <b>Lokalt:</b> samme verktøy og innlogging som i <a href="../uke-01/#lab">uke 1</a>. Åpne et nytt
+    PowerShell-vindu og bruk kursprofilen:
+  </p>
+<pre><code>$env:AZURE_CONFIG_DIR = "$HOME\.azure-az104"
+az account show --query "{subscription:name, bruker:user.name}" -o table</code></pre>
+  <p>
+    Ser du ikke <code>AZ-104 &lt;Navn&gt;</code>, kjør <code>az login --tenant &lt;lab-tenanten&gt;</code> og
+    <code>az account set --subscription "AZ-104 &lt;Navn&gt;"</code> som i uke 1.
+  </p>
+  <p>
+    <b>Cloud Shell:</b> åpne portal.azure.com i et privat vindu og logg inn med lab-brukeren. Klikk
+    <code>&gt;_</code> og velg <b>PowerShell</b>. <b>No storage account required</b> holder. Du er allerede
+    logget inn, så hopp over <code>$env:</code>-linja og <code>az login</code>. Sjekk med
+    <code>az account show</code> som over. Sesjonen lukkes etter 20 minutter uten aktivitet, og da
+    forsvinner både variablene og filene. Se <a href="#vanlige-feil">Vanlige feil</a>.
+  </p>
+  <p>Lag så en mappe til labben, og sett variablene én gang:</p>
+<pre><code>mkdir uke-02
+cd uke-02
+$NAVN = "&lt;fornavn&gt;"      <span class="kom"># små bokstaver, f.eks. svein-tore</span>
+$DOMENE = az rest --method get --url "https://graph.microsoft.com/v1.0/domains" --query "value[?isDefault].id" -o tsv
+$RG = "rg-uke02"
+$DOMENE</code></pre>
+  <p>
+    Den siste linja skal vise domenet til lab-tenanten. Brukernavn i Entra ID slutter på det.
+  </p>
+  <p>
+    Flere av stegene bruker <code>az rest</code>, som sender et kall rett til Microsoft Graph. Det er API-et
+    bak Entra ID. <code>az ad</code> dekker det vanligste, men ikke lisenser, dynamiske grupper og gjester.
+    Når kallet trenger en JSON-body, lager vi den i PowerShell og skriver den til en fil. Windows PowerShell
+    ødelegger anførselstegn i JSON som sendes rett på kommandolinja, og fila virker likt overalt.
+  </p>
+
+  <h3>Del A — Entra ID (ca. 30 min)</h3>
+
+  <h4>0. Sjekk rollen din</h4>
+  <p>
+    <b>Hvorfor:</b> Entra ID og Azure har hvert sitt rollesystem. Owner på subscriptionen gir deg ingenting
+    i katalogen. For å lage brukere trenger du en rolle i Entra ID.
+  </p>
+<pre><code>az rest --method get --url "https://graph.microsoft.com/v1.0/me/memberOf/microsoft.graph.directoryRole" `
+  --query "value[].displayName" -o tsv</code></pre>
+  <p>Du skal se <code>User Administrator</code>. Står det ingenting, si fra før du går videre.</p>
+
+  <h4>1. Opprett en bruker</h4>
+  <p>
+    <b>Hvorfor:</b> brukeren er grunnobjektet i resten av labben. Usage location må være satt før brukeren
+    kan få lisens. Department bruker vi til en dynamisk gruppe i steg 4.
+  </p>
+<pre><code>$PASSORD = "Uke02-" + (Get-Random -Minimum 10000 -Maximum 99999) + "!"
+$CHRIS = az ad user create --display-name "Chris Green ($NAVN)" `
+  --user-principal-name "$NAVN-chris@$DOMENE" --password $PASSORD `
+  --force-change-password-next-sign-in true --query id -o tsv
+
+@{ usageLocation = "NO"; department = "$NAVN-marketing" } | ConvertTo-Json | Set-Content chris.json
+az rest --method patch --url "https://graph.microsoft.com/v1.0/users/$CHRIS" --body "@chris.json"</code></pre>
+  <p>
+    <code>az ad user create</code> har ikke flagg for usage location og department, så de settes med
+    <code>az rest</code>. Åpne Entra-portalen (entra.microsoft.com) → <b>Users</b> og finn
+    <code>Chris Green (&lt;fornavn&gt;)</code>. Under <b>Properties</b> skal du se usage location og department.
+  </p>
+
+  <h4>2. Sikkerhetsgruppe med medlem og eier</h4>
+  <p>
+    <b>Hvorfor:</b> grupper med tildelt medlemskap (assigned) er den vanligste typen. En eier kan styre
+    gruppen uten å være medlem av den, og det spør eksamen om.
+  </p>
+<pre><code>$GRUPPE = az ad group create --display-name "$NAVN-marketing" --mail-nickname "$NAVN-marketing" --query id -o tsv
+az ad group member add --group $GRUPPE --member-id $CHRIS
+$MEG = az ad signed-in-user show --query id -o tsv
+az ad group owner add --group $GRUPPE --owner-object-id $MEG
+
+az ad group member list --group $GRUPPE --query "[].displayName" -o tsv
+az ad group owner list --group $GRUPPE --query "[].userPrincipalName" -o tsv</code></pre>
+  <p>
+    Chris er medlem, og du er eier. <code>az ad group create</code> lager alltid en sikkerhetsgruppe. En
+    Microsoft 365-gruppe, som Learn-øvelsen lager, må du lage i portalen eller med Graph.
+  </p>
+
+  <h4>3. Lisens via gruppen</h4>
+  <p>
+    <b>Hvorfor:</b> lisenser deles ut til grupper, ikke bruker for bruker. Den som blir medlem, får lisensen,
+    og den som går ut, mister den. Gruppebasert lisensiering krever minst Entra ID P1, og tenanten har en
+    P2-prøve.
+  </p>
+<pre><code>$SKU = az rest --method get --url "https://graph.microsoft.com/v1.0/subscribedSkus" `
+  --query "value[?skuPartNumber=='AAD_PREMIUM_P2'].skuId" -o tsv
+@{ addLicenses = @(@{ skuId = $SKU }); removeLicenses = @() } | ConvertTo-Json -Depth 3 | Set-Content lisens.json
+az rest --method post --url "https://graph.microsoft.com/v1.0/groups/$GRUPPE/assignLicense" --body "@lisens.json" --query displayName -o tsv</code></pre>
+  <p>Vent et minutt, og se så hvor lisensen til Chris kommer fra:</p>
+<pre><code>az rest --method get --url "https://graph.microsoft.com/v1.0/users/$CHRIS`?`$select=licenseAssignmentStates" `
+  --query "licenseAssignmentStates[].{viaGruppe:assignedByGroup, status:state}" -o table</code></pre>
+  <p>
+    <code>viaGruppe</code> skal være id-en til <code>$GRUPPE</code>, og status <code>Active</code>. Er tabellen tom,
+    vent litt og kjør igjen. Backtickene foran <code>?</code> og <code>$select</code> hindrer PowerShell i å lese
+    <code>$select</code> som en variabel. I portalen: Chris → <b>Licenses</b>. Der står det at lisensen er
+    arvet fra gruppen.
+  </p>
+
+  <h4>4. Dynamisk gruppe</h4>
+  <p>
+    <b>Hvorfor:</b> en dynamisk gruppe finner medlemmene selv ut fra en regel på brukerens egenskaper.
+    Ingen legger dem inn. Det krever P1, og det kan ta litt tid før endringer slår inn.
+  </p>
+<pre><code>@{
+  displayName = "$NAVN-salg"; mailNickname = "$NAVN-salg"
+  mailEnabled = $false; securityEnabled = $true
+  groupTypes = @("DynamicMembership")
+  membershipRule = "user.department -eq `"$NAVN-salg`""
+  membershipRuleProcessingState = "On"
+} | ConvertTo-Json | Set-Content salg.json
+$SALG = az rest --method post --url "https://graph.microsoft.com/v1.0/groups" --body "@salg.json" --query id -o tsv</code></pre>
+  <p>Gruppen er tom, fordi Chris er i marketing. Flytt ham til salg:</p>
+<pre><code>@{ department = "$NAVN-salg" } | ConvertTo-Json | Set-Content chris.json
+az rest --method patch --url "https://graph.microsoft.com/v1.0/users/$CHRIS" --body "@chris.json"
+az ad group member list --group $SALG --query "[].displayName" -o tsv</code></pre>
+  <p>
+    Kjør den siste linja igjen til Chris dukker opp. I testen tok det under et halvt minutt. Prøv så å legge
+    deg selv inn i gruppen:
+  </p>
+<pre><code>az ad group member add --group $SALG --member-id $MEG</code></pre>
+  <p>
+    Det skal feile. Medlemskapet i en dynamisk gruppe styres bare av regelen, så heller ikke en administrator
+    kan legge inn noen manuelt. Feilmeldingen sier «Insufficient privileges», og det er misvisende.
+  </p>
+
+  <h4>5. Gjestebruker</h4>
+  <p>
+    <b>Hvorfor:</b> eksterne brukere (B2B) får en egen konto i katalogen din, men logger inn med sin egen
+    identitet. Studieguiden har dem som eget punkt.
+  </p>
+<pre><code>@{
+  invitedUserEmailAddress = "$NAVN.az104.gjest@outlook.com"
+  invitedUserDisplayName = "Gjest ($NAVN)"
+  inviteRedirectUrl = "https://myapps.microsoft.com"
+  sendInvitationMessage = $false
+} | ConvertTo-Json | Set-Content gjest.json
+$GJEST = az rest --method post --url "https://graph.microsoft.com/v1.0/invitations" --body "@gjest.json" --query invitedUser.id -o tsv
+
+az rest --method get --url "https://graph.microsoft.com/v1.0/users/$GJEST`?`$select=userPrincipalName,userType,externalUserState" `
+  --query "{upn:userPrincipalName, brukertype:userType, status:externalUserState}" -o table</code></pre>
+  <p>
+    Adressen er oppdiktet, og det sendes ingen e-post. Se på brukernavnet: <code>_outlook.com#EXT#@...</code>.
+    Brukertypen er <code>Guest</code>, og status er <code>PendingAcceptance</code> til invitasjonen er
+    innløst. <code>example.com</code> blir avvist, så vi bruker <code>outlook.com</code>.
+  </p>
+
+  <h4>6. Slett og gjenopprett</h4>
+  <p>
+    <b>Hvorfor:</b> en slettet bruker ligger i <b>Deleted users</b> i 30 dager og kan hentes tilbake.
+    Spørsmålet er hva som følger med tilbake.
+  </p>
+<pre><code>az ad user delete --id $CHRIS
+az rest --method get --url "https://graph.microsoft.com/v1.0/directory/deletedItems/microsoft.graph.user" --query "value[].displayName" -o tsv
+az rest --method post --url "https://graph.microsoft.com/v1.0/directory/deletedItems/$CHRIS/restore" --query displayName -o tsv
+az ad user get-member-groups --id $CHRIS --query "[].displayName" -o tsv</code></pre>
+  <p>
+    Chris er tilbake i begge gruppene, og lisensen kommer tilbake via gruppen. Kjør kommandoen fra steg 3 for
+    å se det. Sikkerhetsgrupper har ingen papirkurv: de er borte med en gang når de slettes. Det har bare
+    Microsoft 365-grupper.
+  </p>
+
+  <h4>SSPR · demo</h4>
+  <p>
+    <b>Hvorfor:</b> selvbetjent tilbakestilling av passord (SSPR) står i studieguiden. Innstillingen gjelder
+    hele tenanten, så Jan viser den på skjermen i stedet for at alle endrer den.
+  </p>
+  <p>
+    Entra → <b>Password reset → Properties</b>: Jan slår på SSPR for gruppen <code>sspr-demo</code>, ikke for alle.
+    Under <b>Authentication methods</b> velger du hvor mange metoder som kreves. Under <b>Registration</b>
+    bestemmer du om brukerne må registrere seg ved neste innlogging.
+  </p>
+
+  <h3>Del B — RBAC i Bicep (ca. 25 min)</h3>
+
+  <h4>7. Gi gruppen Reader på en resource group</h4>
+  <p>
+    <b>Hvorfor:</b> en rolletildeling er en ressurs med tre deler: hvem (principal), hva (rolledefinisjon)
+    og hvor (scope). I Bicep ser du alle tre på ett sted. Gi tilgang til grupper, ikke personer.
+  </p>
+  <p>
+    Lag <code>main.bicep</code> i mappa. Kommandoen under skriver fila, så du trenger ingen editor. Den virker
+    også i Cloud Shell. Lokalt kan du åpne fila i VS Code etterpå, så viser Bicep-utvidelsen hva hver del er.
+  </p>
+<pre><code>@'
+@description('Object-id-en til gruppen som skal ha rollen')
+param groupId string
+
+@description('Reader. Id-en til en innebygd rolle er den samme i alle tenanter')
+param roleDefinitionId string = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+
+resource readerForGroup 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, groupId, roleDefinitionId)
+  properties: {
+    principalId: groupId
+    principalType: 'Group'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitionId)
+  }
+}
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>az group create --name $RG --location norwayeast
+az deployment group what-if -g $RG --template-file main.bicep --parameters groupId=$GRUPPE
+az deployment group create -g $RG --name rbac --template-file main.bicep --parameters groupId=$GRUPPE</code></pre>
+  <p>
+    what-if viser <b>Create</b> på én roleAssignment. Kjør what-if én gang til etter deployen. Nå skal den vise
+    <b>Nochange</b>. Navnet på en rolletildeling må være en GUID, og <code>guid()</code> lager den samme hver
+    gang ut fra de samme verdiene. Det er derfor deployen kan kjøres på nytt uten å feile. Finn rolle-id-er
+    med <code>az role definition list --name Reader --query "[].name" -o tsv</code>.
+  </p>
+
+  <h4>8. Tolk tilgangen</h4>
+  <p>
+    <b>Hvorfor:</b> studieguiden sier «interpret access assignments». Tilgang via en gruppe er lett å overse.
+  </p>
+<pre><code>az role assignment list --assignee $CHRIS --all -o table
+az role assignment list --assignee $CHRIS --all --include-groups `
+  --query "[].{rolle:roleDefinitionName, via:principalName, scope:scope}" -o table</code></pre>
+  <p>
+    Den første er tom, fordi Chris ikke har noen tildeling selv. Den andre viser Reader via
+    <code>&lt;fornavn&gt;-marketing</code>. Se det samme i portalen: <code>rg-uke02</code> →
+    <b>Access control (IAM)</b> → <b>Check access</b> → søk opp Chris. Prøv også fanen
+    <b>Role assignments</b>, og se at du selv står der som Owner, arvet fra subscriptionen.
+  </p>
+
+  <h4>9. Scope og arv (hvis tid)</h4>
+  <p>
+    <b>Hvorfor:</b> en rolle på subscriptionen arves av alle resource groups og ressurser under den. Det er
+    grunnen til at man gir tilgang så lavt som mulig.
+  </p>
+<pre><code>$SUB = az account show --query id -o tsv
+az role assignment create --assignee-object-id $GRUPPE --assignee-principal-type Group `
+  --role Reader --scope "/subscriptions/$SUB"
+az role assignment list --assignee $CHRIS --all --include-groups --query "[].{rolle:roleDefinitionName, scope:scope}" -o table</code></pre>
+  <p>
+    Nå har Chris Reader to steder. Tildelingen på resource groupen er overflødig, siden den på subscriptionen
+    dekker den. Slett tildelingen på subscriptionen igjen med en gang. Kommandoen står under
+    <a href="#opprydding">Opprydding</a>.
+  </p>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td><code>Insufficient privileges</code> i steg 1</td><td>Du mangler User Administrator, eller du er logget inn i feil tenant. Sjekk steg 0 og <code>az account show</code></td></tr>
+        <tr><td>Lisensen feiler med <code>usage location</code></td><td>Usage location må være satt før brukeren kan få lisens. Kjør PATCH-en i steg 1</td></tr>
+        <tr><td>Tom tabell i steg 3</td><td>Gruppelisenser tar et lite minutt. Kjør igjen</td></tr>
+        <tr><td><code>Request body must be valid JSON</code></td><td>Body-en ble sendt rett på kommandolinja, eller fila mangler. Lag fila med <code>ConvertTo-Json | Set-Content</code> og send den med <code>--body "@fil.json"</code></td></tr>
+        <tr><td><code>Guest invitations not allowed for your company</code></td><td>Tenanten avviser adresser på <code>example.com</code>. Bruk en oppdiktet adresse på <code>outlook.com</code></td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-02</code>. I en ny Cloud Shell-sesjon er filene borte, så lag <code>main.bicep</code> på nytt hvis du trenger den. Sett <code>$NAVN</code>, <code>$DOMENE</code> og <code>$RG</code> på nytt, og hent id-ene med f.eks. <code>$CHRIS = az ad user show --id "$NAVN-chris@$DOMENE" --query id -o tsv</code> og <code>$GRUPPE = az ad group show --group "$NAVN-marketing" --query id -o tsv</code></td></tr>
+        <tr><td><code>A group with active licenses assigned cannot be deleted</code></td><td>Fjern lisensen fra gruppen først. Se <a href="#opprydding">Opprydding</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er rolletildelingen fra steg 7. Kommandoene i del A står i labben over.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
   </div>
 </section>
 
@@ -118,9 +401,27 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>
+    Rydd i tenanten også, ikke bare i subscriptionen. Ellers ligger brukerne og gruppene dine der for alle
+    andre. Fjern først lisensen fra gruppen. En gruppe med lisens kan ikke slettes.
+  </p>
+<pre><code>$SUB = az account show --query id -o tsv
+az role assignment delete --assignee $GRUPPE --role Reader --scope "/subscriptions/$SUB"   <span class="kom"># bare hvis du gjorde steg 9</span>
+az group delete --name $RG --yes --no-wait
+
+@{ addLicenses = @(); removeLicenses = @($SKU) } | ConvertTo-Json | Set-Content lisens.json
+az rest --method post --url "https://graph.microsoft.com/v1.0/groups/$GRUPPE/assignLicense" --body "@lisens.json" --query displayName -o tsv
+az ad group delete --group "$NAVN-marketing"
+az ad group delete --group "$NAVN-salg"
+az ad user delete --id $CHRIS
+az ad user delete --id $GJEST</code></pre>
+  <p>Brukerne ligger nå i <b>Deleted users</b> i 30 dager. Slett dem for godt:</p>
+<pre><code>az rest --method delete --url "https://graph.microsoft.com/v1.0/directory/deletedItems/$CHRIS"
+az rest --method delete --url "https://graph.microsoft.com/v1.0/directory/deletedItems/$GJEST"</code></pre>
+  <p>Sjekk at ingenting med navnet ditt står igjen. Det eneste som skal stå, er din egen bruker:</p>
+<pre><code>az ad group list --query "[?starts_with(displayName, '$NAVN-')].displayName" -o tsv
+az ad user list --query "[?starts_with(userPrincipalName, '$NAVN')].userPrincipalName" -o tsv
+az group list -o table</code></pre>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">

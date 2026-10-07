@@ -180,6 +180,11 @@ az deployment group create -g $RG --name addnameparameter-$today \
     <li>Sjekk at du står riktig: <code>Get-AzContext</code></li>
   </ol>
   <p>Sesjonen lukkes etter 20 minutter uten aktivitet.</p>
+  <div class="callout warn">
+    <b>Kjør selve labben lokalt, ikke i Cloud Shell.</b> Stegene forutsetter VS Code på din egen maskin:
+    <code>code .</code> åpner mappa, Bicep-utvidelsen viser feil mens du skriver, og F2 gir nytt navn.
+    I Cloud Shell gir disse stegene ikke mening, og filene forsvinner når sesjonen lukkes.
+  </div>
 
   <h3>Del A — ARM-mal (Learn, ca. 30 min)</h3>
   <p>
