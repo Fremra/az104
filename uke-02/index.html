@@ -228,7 +228,7 @@ az rest --method post --url "https://graph.microsoft.com/v1.0/groups/$GRUPPE/ass
   membershipRuleProcessingState = "On"
 } | ConvertTo-Json | Set-Content salg.json
 $SALG = az rest --method post --url "https://graph.microsoft.com/v1.0/groups" --body "@salg.json" --query id -o tsv</code></pre>
-  <p>Gruppen er tom, fordi Chris er i marketing. Flytt ham til salg:</p>
+  <p>Gruppen er tom, fordi avdelingen til Chris er marketing. Endre avdelingen til salg. Han blir likevel værende i gruppen marketing, fordi den har faste medlemmer:</p>
 <pre><code>@{ department = "$NAVN-salg" } | ConvertTo-Json | Set-Content chris.json
 az rest --method patch --url "https://graph.microsoft.com/v1.0/users/$CHRIS" --body "@chris.json"
 az ad group member list --group $SALG --query "[].displayName" -o tsv</code></pre>
