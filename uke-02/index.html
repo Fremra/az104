@@ -45,7 +45,7 @@
     <div class="fact"><div class="k">Møte</div><div class="v">Mandag 12. oktober</div><div class="s">kl. 17–19 i DEG16</div></div>
     <div class="fact"><div class="k">Temaeier</div><div class="v">Jan</div></div>
     <div class="fact"><div class="k">Duffy</div><div class="v">2 t 4 min</div><div class="s">1 t 39 min på 1,25× · 26 forelesninger</div></div>
-    <div class="fact"><div class="k">Learn</div><div class="v">196 min</div><div class="s">4 moduler</div></div>
+    <div class="fact"><div class="k">Learn</div><div class="v">233 min</div><div class="s">5 moduler</div></div>
   </div>
 </div>
 
@@ -368,6 +368,7 @@ az role assignment list --assignee $CHRIS --all --include-groups --query "[].{ro
         <tr><td><code>Guest invitations not allowed for your company</code></td><td>Tenanten avviser adresser på <code>example.com</code>. Bruk en oppdiktet adresse på <code>outlook.com</code></td></tr>
         <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-02</code>. I en ny Cloud Shell-sesjon er filene borte, så lag <code>main.bicep</code> på nytt hvis du trenger den. Sett <code>$NAVN</code>, <code>$DOMENE</code> og <code>$RG</code> på nytt, og hent id-ene med f.eks. <code>$CHRIS = az ad user show --id "$NAVN-chris@$DOMENE" --query id -o tsv</code> og <code>$GRUPPE = az ad group show --group "$NAVN-marketing" --query id -o tsv</code></td></tr>
         <tr><td><code>A group with active licenses assigned cannot be deleted</code></td><td>Fjern lisensen fra gruppen først. Se <a href="#opprydding">Opprydding</a></td></tr>
+        <tr><td><code>More than one group match the name</code> i oppryddingen</td><td>Du har kjørt steg 4 to ganger, og det finnes to grupper med samme navn. Graph sjekker ikke om navnet er tatt. Slett alle med navnet: <code>az ad group list --filter "displayName eq '$NAVN-salg'" --query "[].id" -o tsv | ForEach-Object { az ad group delete --group $_ }</code></td></tr>
       </tbody>
     </table>
   </div>
