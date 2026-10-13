@@ -32,6 +32,7 @@
     <a href="../#ukeplan">← Alle uker</a>
     <a href="#forberedelse">Forberedelse</a>
     <a href="#lab">Lab</a>
+    <a href="#fasit">Fasit</a>
     <a href="#kunnskapssjekk">Kunnskapssjekk</a>
     <a href="#opprydding">Opprydding</a>
   </nav>
@@ -68,6 +69,13 @@
   </div>
   <p class="table-note">Ren videotid. Artikler og oppgaver kommer i tillegg. Kurset ligger på <a href="https://www.udemy.com/course/70533-azure/">Udemy</a>.</p>
 
+  <h3>Microsofts prep-video · hjemme</h3>
+  <p>
+    <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/shows/exam-readiness-zone/preparing-for-az-104-manage-azure-identities-and-governance-1-of-5">Preparing for AZ-104: Manage Azure identities and governance (1 of 5)</a>,
+    ca. 15 min. Microsoft går gjennom hva eksamen måler i hele domenet, også stoffet fra uke 2. Governance
+    starter på 08:40.
+  </p>
+
   <h3>Microsoft Learn · i møtet</h3>
   <p>
     Læringsstien <a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/paths/az-104-manage-identities-governance/">AZ-104: Manage identities and governance in Azure</a>, modul 5–6.
@@ -77,7 +85,7 @@
     <table>
       <thead><tr><th>Modul</th><th class="tall">Min</th><th class="tall">Øvelser</th><th class="tall">Module assessment</th></tr></thead>
       <tbody>
-        <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/secure-azure-resources-with-rbac/">Secure your Azure resources with Azure role-based access control (Azure RBAC)</a></td><td class="tall">37</td><td class="tall">3</td><td class="tall"><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/secure-azure-resources-with-rbac/3-knowledge-check-rbac-overview">Åpne</a></td></tr>
+        <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/secure-azure-resources-with-rbac/">Secure your Azure resources with Azure role-based access control (Azure RBAC)</a></td><td class="tall">37</td><td class="tall">3</td><td class="tall"><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/secure-azure-resources-with-rbac/7-knowledge-check-rbac">Åpne</a></td></tr>
         <tr><td><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/allow-users-reset-their-password/">Allow users to reset their password with Microsoft Entra self-service password reset</a></td><td class="tall">31</td><td class="tall">2</td><td class="tall">–</td></tr>
       </tbody>
       <tfoot><tr><td>2 moduler</td><td class="tall">68</td><td></td><td></td></tr></tfoot>
@@ -91,10 +99,354 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>Tags, locks og Azure Policy</h2>
+  <p class="section-lead">
+    Ingen av Learn-øvelsene dekker governance-delen av studieguiden, så her er en egen lab. Hvert steg er en
+    oppgave du løser i portalen. Står du fast, eller vil du sjekke resultatet, ligger kommandoen under
+    <b>Vis kommando</b>. Del A er tags og locks, del B er Azure Policy i Bicep, og del C er kostnad og
+    management groups. Fasiten ligger <a href="#fasit">under labben</a>.
+  </p>
+
+  <h3>Før møtet</h3>
+  <p>
+    Samme oppsett som i <a href="../uke-02/#lab">uke 2</a>: portalen i et privat vindu med lab-brukeren, og
+    <code>az</code> lokalt med kursprofilen eller i Cloud Shell. Lag en mappe til labben, og sett variablene
+    én gang:
+  </p>
+<pre><code>mkdir uke-03
+cd uke-03
+$NAVN = "&lt;fornavn&gt;"      <span class="kom"># små bokstaver, f.eks. svein-tore</span>
+$RG = "rg-uke03"
+$RG2 = "rg-uke03-flytt"</code></pre>
+  <p>Tjenestene i portalen finner du raskest i søkefeltet øverst.</p>
+
+  <h3>Del A — Subscription, tags og locks (ca. 20 min)</h3>
+
+  <h4>0. Registrer resource providers</h4>
+  <p>
+    <b>Hvorfor:</b> en subscription kan bare bruke en tjeneste når resource provideren for den er registrert.
+    Policy-compliance og Advisor er ikke registrert hos oss ennå. Det tar et par minutter, så start nå.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne subscriptionen din → <b>Resource providers</b>, og registrer
+    <code>Microsoft.PolicyInsights</code> og <code>Microsoft.Advisor</code>. Status går fra
+    <i>Registering</i> til <i>Registered</i>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az provider register --namespace Microsoft.PolicyInsights
+az provider register --namespace Microsoft.Advisor
+az provider show --namespace Microsoft.PolicyInsights --query registrationState -o tsv</code></pre>
+  </div></details>
+
+  <h4>1. Resource group med tags</h4>
+  <p>
+    <b>Hvorfor:</b> tags er nøkkel og verdi som brukes til kostnadsfordeling og oversikt. Taggen
+    <code>kostnadssted</code> går igjen i hele labben.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke03</code> i Norway East med taggene <code>eier</code> = fornavnet ditt og
+    <code>kostnadssted</code> = <code>1234</code>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az group create --name $RG --location norwayeast --tags eier=$NAVN kostnadssted=1234 --query tags</code></pre>
+  </div></details>
+
+  <h4>2. En ressurs i gruppen</h4>
+  <p>
+    <b>Hvorfor:</b> tags arves ikke. Det spør eksamen om.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en network security group (NSG) som heter <code>&lt;fornavn&gt;-nsg</code>, i
+    <code>rg-uke03</code>, uten tags. Den er gratis. Se så på taggene til NSG-en. Den har ingen, selv om resource
+    groupen har to. I steg 9 lager vi en policy som gir nye ressurser taggen automatisk.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nsg create -g $RG -n "$NAVN-nsg" --query NewNSG.tags</code></pre>
+  </div></details>
+
+  <h4>3. Merge og Replace</h4>
+  <p>
+    <b>Hvorfor:</b> portalen legger bare til tags. Med <code>az</code> og PowerShell kan du også erstatte alle
+    på én gang, og da forsvinner de du hadde. Eksamen spør hvilken kommando som beholder dem.
+  </p>
+  <p><b>Oppgave:</b> dette steget gjør du med <code>az</code>, fordi forskjellen bare finnes der.</p>
+<pre><code>$NSG = az network nsg show -g $RG -n "$NAVN-nsg" --query id -o tsv
+az tag update --resource-id $NSG --operation Merge --tags miljo=lab --query properties.tags
+az tag update --resource-id $NSG --operation Merge --tags app=web --query properties.tags
+az tag update --resource-id $NSG --operation Replace --tags miljo=test --query properties.tags</code></pre>
+  <p>
+    Etter de to Merge-ene har NSG-en begge taggene. Etter Replace står bare <code>miljo=test</code> igjen.
+    <code>az resource tag</code> erstatter også, med mindre du legger til <code>--is-incremental</code>.
+  </p>
+
+  <h4>4. Delete-lock</h4>
+  <p>
+    <b>Hvorfor:</b> en lock beskytter mot uhell, og den gjelder alle, også Owner. RBAC bestemmer hvem som får
+    gjøre noe. En lock stopper handlingen for alle.
+  </p>
+  <p>
+    <b>Oppgave:</b> legg en lock av typen <b>Delete</b> på <code>rg-uke03</code> (<b>Settings → Locks</b>). Prøv
+    så å slette NSG-en, legg til en tag på den, og prøv til slutt å slette hele resource groupen. Slettingene
+    feiler, men taggen går inn. I <code>az</code> heter typen <code>CanNotDelete</code>, og feilen er
+    <code>ScopeLocked</code>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az lock create --name ikke-slett --lock-type CanNotDelete -g $RG --query level -o tsv
+az network nsg delete --ids $NSG
+az tag update --resource-id $NSG --operation Merge --tags app=web --query properties.tags
+az group delete --name $RG      <span class="kom"># svar y. Den skal feile</span></code></pre>
+  </div></details>
+
+  <h4>5. Read-only-lock</h4>
+  <p>
+    <b>Hvorfor:</b> Read-only stopper all skriving, ikke bare sletting, og det rammer mer enn man tror. Nøklene
+    til en storage account kan for eksempel ikke listes, fordi det er et skrivekall (POST).
+  </p>
+  <p>
+    <b>Oppgave:</b> endre locken til <b>Read-only</b>. Prøv å legge til en tag på NSG-en og en inbound-regel som
+    tillater port 443. Begge feiler.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az lock delete --name ikke-slett -g $RG
+az lock create --name skrivebeskyttet --lock-type ReadOnly -g $RG --query level -o tsv
+az tag update --resource-id $NSG --operation Merge --tags eier=$NAVN --query properties.tags
+az network nsg rule create -g $RG --nsg-name "$NAVN-nsg" -n tillat-https --priority 100 `
+  --destination-port-ranges 443 --access Allow --protocol Tcp --query name</code></pre>
+  </div></details>
+
+  <h4>6. Flytt ressursen</h4>
+  <p>
+    <b>Hvorfor:</b> ressurser kan flyttes mellom resource groups og subscriptions. Regionen blir den samme, men
+    resource-id-en endres, fordi navnet på resource groupen er en del av den. En Read-only-lock stopper
+    flyttingen. En Delete-lock gjør det ikke.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke03-flytt</code> med de samme taggene. Prøv å flytte NSG-en dit
+    (<b>Move → Move to another resource group</b>) mens Read-only-locken står. Bytt så til en Delete-lock, og flytt
+    igjen. Flyttingen tar 2–3 minutter. I portalen kan du gå videre til del B mens den går. Fjern locken når
+    flyttingen er ferdig.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az group create -n $RG2 -l norwayeast --tags eier=$NAVN kostnadssted=1234 --query name -o tsv
+az resource move --destination-group $RG2 --ids $NSG      <span class="kom"># feiler med ScopeLocked</span>
+az lock delete --name skrivebeskyttet -g $RG
+az lock create --name ikke-slett --lock-type CanNotDelete -g $RG --query level -o tsv
+az resource move --destination-group $RG2 --ids $NSG      <span class="kom"># går</span>
+az lock delete --name ikke-slett -g $RG
+az resource list -g $RG2 --query "[].{navn:name, region:location, id:id}" -o table</code></pre>
+  </div></details>
+
+  <h3>Del B — Azure Policy i Bicep (ca. 25 min)</h3>
+
+  <h4>7. Krev en tag</h4>
+  <p>
+    <b>Hvorfor:</b> RBAC styrer hvem som får gjøre noe. Policy styrer hvordan ressursene skal være, uansett hvem
+    som lager dem. Effekten Deny stopper ressurser som bryter regelen. Ressurser som fantes fra før, blir
+    ikke slettet, bare merket som non-compliant.
+  </p>
+  <p>
+    <b>Oppgave:</b> tildel den innebygde policyen <i>Require a tag on resources</i> på <code>rg-uke03</code>, med
+    Bicep. Kommandoen under skriver fila, som i uke 2.
+  </p>
+<pre><code>@'
+@description('Taggen som kreves på alle ressurser')
+param tagName string = 'kostnadssted'
+
+@description('Id-en til den innebygde policyen Require a tag on resources')
+param policyDefinitionId string
+
+@description('Default håndhever policyen. DoNotEnforce evaluerer bare')
+@allowed([
+  'Default'
+  'DoNotEnforce'
+])
+param enforcementMode string = 'Default'
+
+resource krevTag 'Microsoft.Authorization/policyAssignments@2024-04-01' = {
+  name: 'krev-${tagName}'
+  properties: {
+    displayName: 'Krev taggen ${tagName}'
+    policyDefinitionId: tenantResourceId('Microsoft.Authorization/policyDefinitions', policyDefinitionId)
+    enforcementMode: enforcementMode
+    parameters: {
+      tagName: {
+        value: tagName
+      }
+    }
+  }
+}
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>$POLICY = az policy definition list --query "[?displayName=='Require a tag on resources'].name" -o tsv
+az deployment group what-if -g $RG --template-file main.bicep --parameters policyDefinitionId=$POLICY
+az deployment group create -g $RG --name policy --template-file main.bicep --parameters policyDefinitionId=$POLICY</code></pre>
+  <p>
+    Oppslaget av policyen tar noen sekunder, fordi det går gjennom alle de innebygde. Prøv så å lage en NSG i
+    <code>rg-uke03</code> uten tag i portalen. <b>Review + create</b> stopper på policyen. Med
+    <code>kostnadssted</code> går det. I testen virket policyen etter et par sekunder, men det kan ta noen minutter.
+    Går NSG-en uten tag likevel gjennom, vent litt og prøv igjen.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nsg create -g $RG -n "$NAVN-uten-tag"      <span class="kom"># RequestDisallowedByPolicy</span>
+az network nsg create -g $RG -n "$NAVN-med-tag" --tags kostnadssted=1234 --query NewNSG.name -o tsv</code></pre>
+  </div></details>
+
+  <h4>8. Enforcement mode</h4>
+  <p>
+    <b>Hvorfor:</b> med <code>DoNotEnforce</code> evaluerer policyen uten å stoppe noe. Slik tester du en policy i
+    et miljø i drift før du skrur den på. Learn-modulen <i>Azure Policy initiatives</i> spør om dette.
+  </p>
+  <p>
+    <b>Oppgave:</b> deploy den samme fila med <code>DoNotEnforce</code>, og lag en NSG uten tag. Den går nå.
+  </p>
+<pre><code>az deployment group create -g $RG --name policy --template-file main.bicep `
+  --parameters policyDefinitionId=$POLICY enforcementMode=DoNotEnforce</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nsg create -g $RG -n "$NAVN-ikke-haandhevet" --query NewNSG.name -o tsv</code></pre>
+  </div></details>
+  <p>
+    Start så et compliance-scan. Det tok 5 minutter i testen, så gå videre. Se etter NSG-en under
+    <b>Policy → Compliance</b> etterpå. Den står som <i>Non-compliant</i>.
+  </p>
+<pre><code>az policy state trigger-scan -g $RG --no-wait
+az policy state list -g $RG --filter "policyAssignmentName eq 'krev-kostnadssted'" `
+  --query "[].{ressurs:resourceId, status:complianceState}" -o table      <span class="kom"># etter ca. 5 min</span></code></pre>
+
+  <h4>9. Arv taggen (hvis tid)</h4>
+  <p>
+    <b>Hvorfor:</b> effekten Modify endrer ressursen i stedet for å stoppe den. Policyen trenger da en egen
+    identitet med rettigheter. Nye ressurser får taggen med en gang. Ressurser som fantes fra før, må du rette
+    med en remediation task.
+  </p>
+  <p>
+    <b>Oppgave:</b> tildel <i>Inherit a tag from the resource group if missing</i> med en egen fil, og sett
+    kravet fra steg 7 tilbake til <code>Default</code>.
+  </p>
+<pre><code>@'
+@description('Taggen som arves fra resource groupen')
+param tagName string = 'kostnadssted'
+
+@description('Id-en til den innebygde policyen Inherit a tag from the resource group if missing')
+param policyDefinitionId string
+
+@description('Id-en til rollen Contributor, som policyen trenger for å endre tags')
+param roleDefinitionId string
+
+resource arvTag 'Microsoft.Authorization/policyAssignments@2024-04-01' = {
+  name: 'arv-${tagName}'
+  location: resourceGroup().location
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    displayName: 'Arv taggen ${tagName} fra resource groupen'
+    policyDefinitionId: tenantResourceId('Microsoft.Authorization/policyDefinitions', policyDefinitionId)
+    parameters: {
+      tagName: {
+        value: tagName
+      }
+    }
+  }
+}
+
+resource arvRolle 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(arvTag.id, roleDefinitionId)
+  properties: {
+    principalId: arvTag.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitionId)
+  }
+}
+'@ | Set-Content arv.bicep -Encoding utf8</code></pre>
+<pre><code>$ARV = az policy definition list --query "[?displayName=='Inherit a tag from the resource group if missing'].name" -o tsv
+$CONTRIBUTOR = az role definition list --name Contributor --query "[0].name" -o tsv
+az deployment group create -g $RG --name arv --template-file arv.bicep --parameters policyDefinitionId=$ARV roleDefinitionId=$CONTRIBUTOR
+az deployment group create -g $RG --name policy --template-file main.bicep --parameters policyDefinitionId=$POLICY</code></pre>
+  <p>
+    Lag en NSG uten tag igjen. Nå går det, og NSG-en har fått <code>kostnadssted</code> fra resource groupen.
+    Modify kjører før Deny, så taggen er på plass når kravet sjekkes. NSG-en fra steg 8 mangler fortsatt
+    taggen. Start en remediation task for den (<b>Policy → Remediation</b>, kryss av for å evaluere på nytt).
+    Den brukte 15–20 minutter i testen, så sjekk taggen like før du rydder opp.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nsg create -g $RG -n "$NAVN-arvet" --query NewNSG.tags
+az policy remediation create -g $RG --name arv --policy-assignment arv-kostnadssted `
+  --resource-discovery-mode ReEvaluateCompliance --query provisioningState -o tsv
+az policy remediation show -g $RG --name arv --query provisioningState -o tsv      <span class="kom"># Succeeded etter 15–20 min</span>
+az network nsg show -g $RG -n "$NAVN-ikke-haandhevet" --query tags</code></pre>
+  </div></details>
+
+  <h3>Del C — Kostnad og management groups (ca. 10 min)</h3>
+
+  <h4>10. Budsjett og Advisor</h4>
+  <p>
+    <b>Hvorfor:</b> et budsjett varsler, men stopper ingenting. Skal noe stoppes, må varselet starte en action
+    group som gjør jobben. Advisor kommer med anbefalinger, blant annet om kostnad.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Cost Management → Budgets</b> for subscriptionen din. Finn beløpet, når det varsles og
+    hvem som får varselet. Se så i <b>Advisor → Cost</b>. Der står det trolig ingenting, fordi subscriptionen er
+    nesten tom.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az consumption budget list --query "[].{navn:name, belop:amount, periode:timeGrain}" -o table
+az consumption budget list --query "[0].notifications" -o json
+az advisor recommendation list --category Cost -o table</code></pre>
+  </div></details>
+
+  <h4>11. Management groups og arv</h4>
+  <p>
+    <b>Hvorfor:</b> en management group samler subscriptions, og policy og roller som settes der, arves ned. En
+    subscription har bare én forelder, og treet kan ha seks nivåer under root.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Management groups</b> og finn subscriptionen din under <i>Deltakere</i>. Gå så til
+    <b>Policy → Assignments</b> med subscriptionen din som scope. Der står to policyer du ikke har laget.
+    <i>Tillatte regioner</i> er arvet fra <code>mg-deltakere</code> og står i <code>DoNotEnforce</code>. Den
+    andre har Microsoft lagt på Tenant Root Group, og den blokkerer West Europe.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az account management-group show --name mg-deltakere --expand --query "children[].displayName" -o tsv
+$SUB = az account show --query id -o tsv
+$TOKEN = az account get-access-token --query accessToken -o tsv
+$URL = "https://management.azure.com/subscriptions/$SUB/providers/Microsoft.Authorization/policyAssignments?api-version=2023-04-01&amp;`$filter=atScope()"
+(Invoke-RestMethod -Uri $URL -Headers @{ Authorization = "Bearer $TOKEN" }).value.properties |
+  Format-List displayName, scope, enforcementMode</code></pre>
+  <p>
+    <code>az policy assignment list</code> viser ikke policyer som er arvet fra en management group, selv om
+    hjelpeteksten sier det. Derfor går vi rett mot API-et. <code>az rest</code> virker ikke her, fordi Windows
+    PowerShell sender parentesene videre til <code>cmd.exe</code>, som feiler på dem.
+  </p>
+  </div></details>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td><code>MissingSubscriptionRegistration</code></td><td>Resource provideren er ikke registrert ennå. Se steg 0, og vent til den står som <i>Registered</i></td></tr>
+        <tr><td><code>ScopeLocked</code> der du ikke venter det</td><td>Det står en lock igjen på resource groupen. Se <b>Settings → Locks</b>, eller <code>az lock list -g $RG -o table</code></td></tr>
+        <tr><td><code>RequestDisallowedByPolicy</code> i del A</td><td>Du har startet på del B, og kravet om tag gjelder <code>rg-uke03</code>. Legg til <code>kostnadssted</code></td></tr>
+        <tr><td>Tom tabell fra <code>az policy state list</code></td><td>Scannet er ikke ferdig. Vent et par minutter, og kjør igjen</td></tr>
+        <tr><td>Ingen management groups i portalen</td><td>Si fra til Anders. Du skal ha lesetilgang til hierarkiet denne uka</td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-03</code>, og sett <code>$NAVN</code>, <code>$RG</code> og <code>$RG2</code> på nytt. Etter steg 6 ligger NSG-en i <code>$RG2</code>: <code>$NSG = az network nsg show -g $RG2 -n "$NAVN-nsg" --query id -o tsv</code>. <code>$POLICY</code> henter du med oppslaget i steg 7</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er kravet om tag fra steg 7–8, og <code>arv.bicep</code> er Modify-policyen fra steg 9.
+    Resten står under <b>Vis kommando</b> i hvert steg.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
+    <a class="btn-lenke sekundaer" href="arv.bicep" download>arv.bicep</a>
   </div>
 </section>
 
@@ -114,9 +466,17 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>
+    Fjern locks først. En resource group med lock kan ikke slettes. Policy-tildelingene og rolletildelingen til
+    policyen forsvinner sammen med resource groupen.
+  </p>
+<pre><code>foreach ($g in $RG, $RG2) { az lock list -g $g --query "[].id" -o tsv | ForEach-Object { az lock delete --ids $_ } }
+az group delete --name $RG --yes --no-wait
+az group delete --name $RG2 --yes --no-wait</code></pre>
+  <p>Sjekk etter et par minutter at ingenting står igjen:</p>
+<pre><code>az lock list -o table
+az group list -o table</code></pre>
+  <p>Resource providerne kan stå registrert. Det koster ingenting.</p>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">
