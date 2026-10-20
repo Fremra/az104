@@ -32,6 +32,7 @@
     <a href="../#ukeplan">← Alle uker</a>
     <a href="#forberedelse">Forberedelse</a>
     <a href="#lab">Lab</a>
+    <a href="#fasit">Fasit</a>
     <a href="#kunnskapssjekk">Kunnskapssjekk</a>
     <a href="#opprydding">Opprydding</a>
   </nav>
@@ -95,10 +96,482 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>Storage account, tilgang og Azure Files</h2>
+  <p class="section-lead">
+    De fire Learn-modulene har bare to øvelser, så her er en egen lab. Hvert steg er en oppgave du løser i
+    portalen. Står du fast, eller vil du sjekke resultatet, ligger kommandoen under <b>Vis kommando</b>. Del A er
+    storage accounten i Bicep, redundans og access tiers, del B er tilgang med nøkler, SAS og brannmur, og kryptering,
+    og del C er soft delete, versjonering, lifecycle management og Azure Files med Entra-tilgang. Fasiten ligger <a href="#fasit">under labben</a>.
+  </p>
+
+  <h3>Før møtet</h3>
+  <p>
+    Samme oppsett som i <a href="../uke-02/#lab">uke 2</a>: portalen i et privat vindu med lab-brukeren, og
+    <code>az</code> lokalt med kursprofilen eller i Cloud Shell. Lag en mappe til labben, sett variabelen
+    én gang, og lag en liten fil til opplastingene:
+  </p>
+<pre><code>mkdir uke-04
+cd uke-04
+$RG = "rg-uke04"
+"hei fra uke 4" | Set-Content hei.txt</code></pre>
+  <p>Tjenestene i portalen finner du raskest i søkefeltet øverst.</p>
+
+  <h3>Del A — Storage account (ca. 15 min)</h3>
+
+  <h4>1. Storage account i Bicep</h4>
+  <p>
+    <b>Hvorfor:</b> navnet på en storage account blir en del av URL-en, så det må være unikt i hele Azure. Det kan
+    ha 3–24 tegn, bare små bokstaver og tall, og ingen bindestrek. Bicep-fila lager navnet med
+    <code>uniqueString</code>, så alle får hvert sitt. <i>StorageV2</i> (general-purpose v2) er standardtypen og
+    den eksamen forventer at du velger.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke04</code> i Norway East, og deploy fila under. Åpne storage accounten i portalen
+    og finn redundansen og access tier under <b>Overview</b>.
+  </p>
+<pre><code>@'
+@description('Redundansen til storage accounten')
+@allowed([
+  'Standard_LRS'
+  'Standard_GRS'
+  'Standard_RAGRS'
+  'Standard_ZRS'
+])
+param skuName string = 'Standard_LRS'
+
+@description('Soft delete: slettede blober, containere og filshare kan hentes tilbake i 7 dager')
+param softDelete bool = false
+
+@description('Versjonering: gamle versjoner av en blob tas vare på når den skrives over')
+param versjonering bool = false
+
+resource sa 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: 'st${uniqueString(resourceGroup().id)}'
+  location: resourceGroup().location
+  sku: {
+    name: skuName
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+  }
+}
+
+resource blob 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: sa
+  name: 'default'
+  properties: {
+    isVersioningEnabled: versjonering
+    deleteRetentionPolicy: {
+      enabled: softDelete
+      days: softDelete ? 7 : null
+    }
+    containerDeleteRetentionPolicy: {
+      enabled: softDelete
+      days: softDelete ? 7 : null
+    }
+  }
+}
+
+resource filer 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
+  parent: sa
+  name: 'default'
+  properties: {
+    shareDeleteRetentionPolicy: {
+      enabled: softDelete
+      days: softDelete ? 7 : null
+    }
+  }
+}
+
+output navn string = sa.name
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>az group create --name $RG --location norwayeast --query properties.provisioningState -o tsv
+az deployment group what-if -g $RG --template-file main.bicep
+az deployment group create -g $RG --name storage --template-file main.bicep --query properties.provisioningState -o tsv
+$SA = az deployment group show -g $RG --name storage --query properties.outputs.navn.value -o tsv
+$SA</code></pre>
+  <p><code>$SA</code> er navnet på storage accounten, og det brukes i resten av labben.</p>
+
+  <h4>2. Bytt redundans</h4>
+  <p>
+    <b>Hvorfor:</b> LRS har tre kopier i ett datasenter, ZRS fordeler dem på tre availability zones, og GRS kopierer
+    i tillegg til regionen som er paret med din, så GRS har seks kopier. Norway East er paret med Norway West. RA-GRS
+    lar deg også lese fra den kopien. Til ZRS må accounten konverteres, og det tar tid. Det spør eksamen om.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Data management → Redundancy</b>, og se hvilke valg du har, uten å lagre. Kjør så
+    what-if med <code>Standard_GRS</code>. Den viser endringen uten å gjøre den.
+  </p>
+<pre><code>az deployment group what-if -g $RG --template-file main.bicep --parameters skuName=Standard_GRS</code></pre>
+  <div class="callout warn">
+    Ikke lagre endringen til GRS. Mens kopien til Norway West settes opp, kan ikke accounten slettes, og i testen
+    sto den slik i en halvtime.
+  </div>
+
+  <h4>3. Owner er ikke nok</h4>
+  <p>
+    <b>Hvorfor:</b> Owner styrer storage accounten (control plane), men gir ikke tilgang til dataene i den (data
+    plane). For å lese og skrive blober med Entra-brukeren din trenger du en egen rolle, som
+    <i>Storage Blob Data Contributor</i>. Det er et av de vanligste eksamensspørsmålene om storage.
+  </p>
+  <p>
+    <b>Oppgave:</b> dette steget gjør du med <code>az</code>, fordi portalen bruker nøkkelen i det stille. Lag
+    containeren <code>dokumenter</code>, og prøv å laste opp <code>hei.txt</code> med Entra-brukeren din.
+    Containeren går, men opplastingen feiler. Gi deg selv rollen, og prøv igjen. I testen tok det fra 16 sekunder
+    til et par minutter før rollen virket, så feiler den fortsatt, vent litt og kjør linjen på nytt.
+  </p>
+<pre><code>az storage container create --account-name $SA --name dokumenter --auth-mode login
+az storage blob upload --account-name $SA -c dokumenter -n hei.txt -f hei.txt --auth-mode login --no-progress --query etag -o tsv      <span class="kom"># feiler</span>
+$SAID = az storage account show -n $SA --query id -o tsv
+$MEG = az ad signed-in-user show --query id -o tsv
+az role assignment create --assignee $MEG --role "Storage Blob Data Contributor" --scope $SAID --query roleDefinitionName -o tsv
+az storage blob upload --account-name $SA -c dokumenter -n hei.txt -f hei.txt --auth-mode login --no-progress --overwrite --query etag -o tsv</code></pre>
+  <p>
+    I portalen ser du det samme under containeren: bytt <b>Authentication method</b> fra <i>Access key</i> til
+    <i>Microsoft Entra user account</i>.
+  </p>
+
+  <h4>4. Access tiers</h4>
+  <p>
+    <b>Hvorfor:</b> Hot, Cool, Cold og Archive koster mindre å lagre og mer å lese, jo lenger ned du går. Cool har
+    minstetid 30 dager, Cold 90 og Archive 180. Sletter du før, betaler du likevel for resten. Archive er offline:
+    bloben må hentes tilbake (rehydrate) før den kan leses, og det kan ta opptil 15 timer.
+  </p>
+  <p>
+    <b>Oppgave:</b> last opp <code>hei.txt</code> en gang til som <code>rapport.txt</code>. Sett den til
+    <b>Cool</b> og så <b>Archive</b> (<b>Change tier</b> på bloben), og prøv å laste den ned. Det feiler. Sett den
+    tilbake til <b>Hot</b>, og se at den står som <i>rehydrate-pending-to-hot</i>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage blob upload --account-name $SA -c dokumenter -n rapport.txt -f hei.txt --auth-mode login --no-progress --query etag -o tsv
+az storage blob set-tier --account-name $SA -c dokumenter -n rapport.txt --tier Cool --auth-mode login
+az storage blob set-tier --account-name $SA -c dokumenter -n rapport.txt --tier Archive --auth-mode login
+az storage blob download --account-name $SA -c dokumenter -n rapport.txt -f ut.txt --auth-mode login      <span class="kom"># BlobArchived</span>
+az storage blob set-tier --account-name $SA -c dokumenter -n rapport.txt --tier Hot --rehydrate-priority Standard --auth-mode login
+az storage blob show --account-name $SA -c dokumenter -n rapport.txt --auth-mode login `
+  --query "{tier:properties.blobTier, status:properties.rehydrationStatus}" -o json</code></pre>
+  </div></details>
+
+  <h3>Del B — Tilgang og kryptering (ca. 30 min)</h3>
+
+  <h4>5. Access keys</h4>
+  <p>
+    <b>Hvorfor:</b> en access key gir full tilgang til alt i storage accounten, uten roller. Det er to nøkler, så du
+    kan rotere den ene mens appene bruker den andre. Den som kan liste nøklene, har i praksis tilgang til dataene. I drift
+    legger du nøklene i Key Vault, som kan rotere dem for deg. Det er Microsofts anbefaling.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Security + networking → Access keys</b>, og vis nøklene. Roter <code>key2</code>
+    (<b>Rotate key</b>). Nøkkel 1 bruker vi i steg 6, så la den stå.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage account keys list -n $SA --query "[].keyName" -o tsv
+az storage account keys renew -n $SA -g $RG --key key2 --query "[].keyName" -o tsv
+$KEY = az storage account keys list -n $SA --query "[0].value" -o tsv</code></pre>
+  </div></details>
+
+  <h4>6. SAS med stored access policy</h4>
+  <p>
+    <b>Hvorfor:</b> en SAS er en lenke med begrenset tilgang og utløpstid. En vanlig SAS signeres med nøkkelen og kan
+    bare trekkes tilbake ved å rotere nøkkelen, og da slutter alle andre SAS-er signert med den også å virke. Knytter
+    du SAS-en til en stored access policy på containeren, trekker du den tilbake ved å slette policyen. En container
+    kan ha fem slike policyer.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en stored access policy <code>les</code> på <code>dokumenter</code> med lesetilgang i ett døgn
+    (<b>Access policy</b> på containeren). Lag en SAS for <code>hei.txt</code> som bruker policyen, og åpne URL-en i
+    nettleseren. Slett så policyen, vent et halvt minutt, og last siden på nytt. Nå får du 403.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>$UTLOP = (Get-Date).ToUniversalTime().AddDays(1).ToString("yyyy-MM-ddTHH:mmZ")
+az storage container policy create --account-name $SA --account-key $KEY -c dokumenter -n les --permissions r --expiry $UTLOP -o none
+$SAS = az storage blob generate-sas --account-name $SA --account-key $KEY -c dokumenter -n hei.txt --policy-name les -o tsv
+$URL = "https://$SA.blob.core.windows.net/dokumenter/hei.txt?$SAS"
+(Invoke-WebRequest $URL -UseBasicParsing).Content
+az storage container policy delete --account-name $SA --account-key $KEY -c dokumenter -n les -o none
+(Invoke-WebRequest $URL -UseBasicParsing).Content      <span class="kom"># 403 etter ca. 30 s</span></code></pre>
+  <p>
+    Se på SAS-en. Den har bare <code>si=les</code> og ingen utløpstid, fordi det står i policyen.
+  </p>
+  </div></details>
+
+  <h4>7. User delegation SAS</h4>
+  <p>
+    <b>Hvorfor:</b> en user delegation SAS signeres med Entra-brukeren din i stedet for nøkkelen. Microsoft anbefaler
+    den. Den virker bare for blober, varer høyst sju dager, og gir aldri mer enn rollen din tillater. Alle trekkes
+    tilbake på én gang ved å fornye user delegation-nøklene.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en SAS for <code>hei.txt</code> med lesetilgang i to timer, og velg <b>User delegation key</b>
+    som <i>Signing method</i> (<b>Generate SAS</b> på bloben). Åpne URL-en. Trekk den tilbake med kommandoen under,
+    og prøv igjen etter et halvt minutt.
+  </p>
+<pre><code>az storage account revoke-delegation-keys -n $SA -g $RG -o none</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>$UTLOP = (Get-Date).ToUniversalTime().AddHours(2).ToString("yyyy-MM-ddTHH:mmZ")
+$SAS = az storage blob generate-sas --account-name $SA -c dokumenter -n hei.txt --permissions r --expiry $UTLOP --auth-mode login --as-user -o tsv
+$URL = "https://$SA.blob.core.windows.net/dokumenter/hei.txt?$SAS"
+(Invoke-WebRequest $URL -UseBasicParsing).Content
+az storage account revoke-delegation-keys -n $SA -g $RG -o none
+(Invoke-WebRequest $URL -UseBasicParsing).Content      <span class="kom"># 403 etter ca. 30 s</span></code></pre>
+  </div></details>
+
+  <h4>8. Brannmur</h4>
+  <p>
+    <b>Hvorfor:</b> brannmuren styrer hvilke nettverk som når dataene. Med <i>Deny</i> som standard slipper bare IP-ene
+    og VNet-ene du har lagt til, inn. Den gjelder data plane: du kan fortsatt administrere accounten. Service endpoints
+    og private endpoints kommer i uke 7.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Security + networking → Networking</b>, og velg <i>Enable from selected networks</i> uten
+    å legge til noe. Prøv å liste blobene. Det feiler. Legg så til din egen IP (<b>Add your client IP address</b>), og
+    prøv igjen etter et halvt minutt.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage account update -n $SA -g $RG --default-action Deny --query networkRuleSet.defaultAction -o tsv
+az storage blob list --account-name $SA -c dokumenter --auth-mode login --query "[].name" -o tsv      <span class="kom"># feiler etter ca. 30 s</span>
+$IP = Invoke-RestMethod https://api.ipify.org
+az storage account network-rule add -n $SA -g $RG --ip-address $IP --query "ipRules[].ipAddressOrRange" -o tsv
+az storage blob list --account-name $SA -c dokumenter --auth-mode login --query "[].name" -o tsv</code></pre>
+  <p>Bruker du Cloud Shell, er det Cloud Shell sin IP som må inn, ikke din.</p>
+  </div></details>
+
+  <h4>9. Kryptering</h4>
+  <p>
+    <b>Hvorfor:</b> alt i en storage account krypteres alltid med AES-256, og det kan ikke skrus av. Du velger bare
+    hvem som eier nøkkelen: Microsoft (standard) eller deg, med en customer-managed key i Key Vault. Da må Key Vault
+    ha soft delete og purge protection, og storage accounten bruker en managed identity til å hente nøkkelen.
+    Infrastructure encryption (dobbel kryptering) kan bare skrus på når accounten lages. Et encryption scope gir en
+    egen nøkkel til én container eller blob.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Security + networking → Encryption</b>, og se på valgene for nøkkel uten å lagre. Lag så
+    encryption scopet <code>eget</code> med Microsoft-nøkkel (<b>Encryption scopes → Add</b>), og en container
+    <code>hemmelig</code> som bruker det for alle blober. Last opp <code>hei.txt</code> dit, og se hvilket scope
+    bloben har.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage account show -n $SA --query "encryption.{nokkel:keySource, infrastruktur:requireInfrastructureEncryption}" -o json
+az storage account encryption-scope create --account-name $SA -g $RG -n eget --key-source Microsoft.Storage --query state -o tsv
+az storage container create --account-name $SA --name hemmelig --default-encryption-scope eget `
+  --prevent-encryption-scope-override true --auth-mode login
+az storage blob upload --account-name $SA -c hemmelig -n hei.txt -f hei.txt --auth-mode login --no-progress --query etag -o tsv
+az storage blob show --account-name $SA -c hemmelig -n hei.txt --auth-mode login --query encryptionScope -o tsv</code></pre>
+  <p>
+    Vi lager ikke en customer-managed key. Key Vault med purge protection kan ikke slettes før det er gått minst sju
+    dager, så den ville blitt stående etter møtet.
+  </p>
+  </div></details>
+
+  <h3>Del C — Data og Azure Files (ca. 25 min)</h3>
+
+  <h4>10. Soft delete</h4>
+  <p>
+    <b>Hvorfor:</b> soft delete holder på slettede blober, containere og filshare i 1–365 dager, så de kan hentes
+    tilbake. Det skrus på hver for seg. Parameteren i Bicep-fila skrur på alle tre.
+  </p>
+  <p>
+    <b>Oppgave:</b> skru på soft delete ved å deploye <code>main.bicep</code> igjen med <code>softDelete=true</code>.
+    Slett <code>hei.txt</code>, vis slettede blober (<b>Show deleted blobs</b>), og hent den tilbake (<b>Undelete</b>).
+  </p>
+<pre><code>az deployment group create -g $RG --name storage --template-file main.bicep `
+  --parameters softDelete=true --query properties.provisioningState -o tsv</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage blob delete --account-name $SA -c dokumenter -n hei.txt --auth-mode login
+az storage blob list --account-name $SA -c dokumenter --include d --auth-mode login --query "[].{navn:name, slettet:deleted}" -o table
+az storage blob undelete --account-name $SA -c dokumenter -n hei.txt --auth-mode login -o none
+az storage blob list --account-name $SA -c dokumenter --auth-mode login --query "[].name" -o tsv</code></pre>
+  </div></details>
+
+  <h4>11. Versjonering</h4>
+  <p>
+    <b>Hvorfor:</b> versjonering tar vare på den gamle versjonen hver gang en blob skrives over eller slettes. Soft
+    delete beskytter mot sletting, versjonering også mot overskriving. Objektreplikering i steg 15 krever versjonering.
+  </p>
+  <p>
+    <b>Oppgave:</b> deploy fila igjen med <code>versjonering=true</code>. Ta med <code>softDelete=true</code>, ellers
+    skrus soft delete av igjen: det som ikke står i deployen, får standardverdien. Endre <code>hei.txt</code> og last
+    den opp på nytt. Se versjonene under <b>Versions</b> på bloben, og gjør den gamle til gjeldende igjen
+    (<b>Make current version</b>).
+  </p>
+<pre><code>az deployment group create -g $RG --name storage --template-file main.bicep `
+  --parameters softDelete=true versjonering=true --query properties.provisioningState -o tsv</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>"versjon 2" | Set-Content hei.txt
+az storage blob upload --account-name $SA -c dokumenter -n hei.txt -f hei.txt --auth-mode login --no-progress --overwrite --query etag -o tsv
+az storage blob list --account-name $SA -c dokumenter --include v --auth-mode login `
+  --query "[?name=='hei.txt'].{versjon:versionId, gjeldende:isCurrentVersion}" -o table
+$V = az storage blob list --account-name $SA -c dokumenter --include v --auth-mode login `
+  --query "[?name=='hei.txt' &amp;&amp; !isCurrentVersion].versionId | [0]" -o tsv
+az storage blob download --account-name $SA -c dokumenter -n hei.txt --version-id $V -f gammel.txt --auth-mode login --no-progress -o none
+az storage blob upload --account-name $SA -c dokumenter -n hei.txt -f gammel.txt --auth-mode login --no-progress --overwrite --query etag -o tsv
+az storage blob download --account-name $SA -c dokumenter -n hei.txt -f ut.txt --auth-mode login --no-progress -o none
+Get-Content ut.txt</code></pre>
+  <p>Med <code>az</code> henter du den gamle versjonen og laster den opp igjen. Da blir også «versjon 2» en egen versjon.</p>
+  </div></details>
+
+  <h4>12. Lifecycle management</h4>
+  <p>
+    <b>Hvorfor:</b> en lifecycle-regel flytter blober til en billigere tier eller sletter dem etter et antall dager.
+    Regelen kjøres én gang i døgnet, så du ser ikke effekten i møtet. Eksamen gir deg gjerne en regel og spør hva som
+    skjer med en gitt blob.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en regel under <b>Data management → Lifecycle management</b> for blober under
+    <code>dokumenter/logg/</code>: Cool etter 30 dager, Archive etter 90 og slett etter 365. Med <code>az</code> er
+    regelen en JSON-fil.
+  </p>
+<pre><code>@'
+{
+  "rules": [
+    {
+      "name": "kald-og-slett",
+      "enabled": true,
+      "type": "Lifecycle",
+      "definition": {
+        "filters": {
+          "blobTypes": [ "blockBlob" ],
+          "prefixMatch": [ "dokumenter/logg/" ]
+        },
+        "actions": {
+          "baseBlob": {
+            "tierToCool": { "daysAfterModificationGreaterThan": 30 },
+            "tierToArchive": { "daysAfterModificationGreaterThan": 90 },
+            "delete": { "daysAfterModificationGreaterThan": 365 }
+          }
+        }
+      }
+    }
+  ]
+}
+'@ | Set-Content livssyklus.json -Encoding utf8
+az storage account management-policy create --account-name $SA -g $RG --policy "@livssyklus.json" --query "policy.rules[].name" -o tsv</code></pre>
+  <p><code>@</code> i starten betyr at <code>az</code> leser fila. Anførselstegnene trengs i PowerShell.</p>
+
+  <h4>13. Azure Files</h4>
+  <p>
+    <b>Hvorfor:</b> Azure Files er filshare over SMB (port 445) eller NFS. En share har en kvote, og et snapshot tar
+    vare på hele sharen slik den var. Snapshotet er skrivebeskyttet, og du kan hente enkeltfiler fra det. Soft delete
+    for filshare skrudde du på i steg 10. Mange nettverk og internettleverandører stenger port 445, og da kan du ikke
+    mounte sharen. Eksamen spør om det.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag sharen <code>felles</code> med kvote 10 GiB, last opp <code>hei.txt</code>, og ta et snapshot
+    (<b>Snapshots → Add snapshot</b>). Trykk <b>Connect</b> på sharen og se på skriptet, men ikke kjør det. Sjekk
+    heller om port 445 er åpen herfra. I testen var den stengt. Slett til slutt sharen, og finn den under
+    <b>File shares → Show deleted shares</b>. <b>Undelete</b> virket ikke før det var gått over ti minutter i testen,
+    så det venter vi ikke på.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage share-rm create --storage-account $SA -g $RG --name felles --quota 10 --query shareQuota -o tsv
+az storage file upload --account-name $SA --account-key $KEY --share-name felles --source hei.txt --no-progress -o none
+az storage share-rm snapshot --storage-account $SA -g $RG --name felles --query snapshotTime -o tsv
+Test-NetConnection "$SA.file.core.windows.net" -Port 445 -InformationLevel Quiet
+az storage share-rm delete --storage-account $SA -g $RG --name felles --include snapshots --yes
+az storage share-rm list --storage-account $SA -g $RG --include-deleted --query "[].{navn:name, slettet:deleted}" -o table</code></pre>
+  <p>
+    Filen lastes opp med nøkkelen. Med Entra-brukeren trenger du en egen rolle for Azure Files, akkurat som for blober.
+  </p>
+  </div></details>
+
+  <h4>14. Entra-tilgang til Azure Files</h4>
+  <p>
+    <b>Hvorfor:</b> når brukere mounter en share over SMB med egen identitet, styres tilgangen i to lag. RBAC på
+    sharen (<i>Storage File Data SMB Share Reader</i>, <i>Contributor</i> og <i>Elevated Contributor</i>) bestemmer om
+    de kommer inn, og NTFS-rettigheter bestemmer hva de får gjøre med mapper og filer. Det krever en identitetskilde:
+    AD DS, Microsoft Entra Domain Services eller Microsoft Entra Kerberos. Med en <i>default share-level permission</i>
+    gjelder én rolle alle brukere. Utenom SMB, i portalen og med <code>az</code>, gir rollen
+    <i>Storage File Data Privileged Contributor</i> tilgang med Entra, slik du gjorde for blober i steg 3.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Data storage → File shares</b>, og se på valgene under <b>Identity-based access</b> uten å
+    sette opp noe. SMB-delen krever en domene- eller Entra-tilknyttet maskin og port 445, og det har vi ikke. Lag så
+    sharen <code>team</code>, og last opp <code>hei.txt</code> med Entra-brukeren din. Det feiler. Gi deg selv rollen,
+    og prøv igjen etter et par minutter.
+  </p>
+<pre><code>az storage share-rm create --storage-account $SA -g $RG --name team --quota 1 --query name -o tsv
+az storage file upload --account-name $SA --share-name team --source hei.txt --auth-mode login `
+  --enable-file-backup-request-intent --no-progress -o none      <span class="kom"># feiler</span>
+az role assignment create --assignee $MEG --role "Storage File Data Privileged Contributor" --scope $SAID --query roleDefinitionName -o tsv
+az storage file upload --account-name $SA --share-name team --source hei.txt --auth-mode login `
+  --enable-file-backup-request-intent --no-progress -o none
+az storage file list --account-name $SA --share-name team --auth-mode login --enable-file-backup-request-intent --query "[].name" -o tsv</code></pre>
+  <p>
+    <code>--enable-file-backup-request-intent</code> må med når du bruker Entra mot Azure Files med <code>az</code>.
+    Rollen går forbi NTFS-rettighetene, derav <i>Privileged</i>.
+  </p>
+
+  <h4>15. Objektreplikering (valgfritt)</h4>
+  <div class="callout warn">
+    Valgfritt, og det tar tid. Du trenger en storage account til, og kopieringen går i bakgrunnen. Ta steget
+    hvis du er ferdig med resten, og la det gå mens vi går videre.
+  </div>
+  <p>
+    <b>Hvorfor:</b> objektreplikering kopierer blober asynkront fra en container til en container i en annen storage
+    account, gjerne i en annen region. Begge accountene må ha versjonering, og kilden må ha change feed. Snapshots og
+    blober i Archive blir ikke kopiert. Eksamen spør om kravene.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en storage account til i <code>rg-uke04</code> med versjonering og containeren
+    <code>kopi</code>. Skru på change feed i den første accounten (<b>Data management → Data protection</b>). Lag så en
+    regel fra <code>dokumenter</code> til <code>kopi</code> under <b>Data management → Object replication</b> på den
+    første accounten, og velg <i>Copy over: Everything</i>. Last opp en ny blob, og se etter den i <code>kopi</code>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>$SA2 = "$($SA)kopi"
+az storage account create -n $SA2 -g $RG -l norwayeast --sku Standard_LRS --kind StorageV2 `
+  --allow-blob-public-access false --min-tls-version TLS1_2 --query provisioningState -o tsv
+az storage account blob-service-properties update -n $SA2 -g $RG --enable-versioning true --query isVersioningEnabled -o tsv
+az storage container create --account-name $SA2 --name kopi --auth-mode login
+az storage account blob-service-properties update -n $SA -g $RG --enable-change-feed true --query changeFeed.enabled -o tsv
+az storage account or-policy create --account-name $SA2 -g $RG --source-account $SA --destination-account $SA2 `
+  --source-container dokumenter --destination-container kopi --min-creation-time 1601-01-01T00:00:00Z `
+  --query policyId -o tsv
+$OR = az storage account or-policy list --account-name $SA2 -g $RG --query "[0].policyId" -o tsv
+az storage account or-policy show --account-name $SA2 -g $RG --policy-id $OR | Set-Content or-policy.json
+az storage account or-policy create --account-name $SA -g $RG --policy "@or-policy.json" --query policyId -o tsv
+"replikert" | Set-Content ny.txt
+az storage blob upload --account-name $SA -c dokumenter -n ny.txt -f ny.txt --auth-mode login --no-progress --query etag -o tsv
+az storage blob list --account-name $SA2 -c kopi --auth-mode key --query "[].name" -o tsv      <span class="kom"># kjør igjen til ny.txt dukker opp</span></code></pre>
+  <p>
+    Regelen lages først på målet og så på kilden med samme id. Portalen gjør begge deler for deg. Bloben i
+    <code>kopi</code> leses med nøkkelen, fordi rollen din bare gjelder den første accounten.
+  </p>
+  </div></details>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td><code>You do not have the required permissions</code> med <code>--auth-mode login</code></td><td>Du mangler rollen for data, eller den har ikke slått inn ennå. Blober trenger <i>Storage Blob Data Contributor</i> (steg 3), og Azure Files <i>Storage File Data Privileged Contributor</i> (steg 14). Vent et par minutter, og prøv igjen</td></tr>
+        <tr><td><code>The request may be blocked by network rules</code></td><td>Brannmuren fra steg 8. IP-en din er ikke lagt til, den har endret seg, eller du bruker Cloud Shell. Legg til riktig IP, eller sett <code>--default-action Allow</code></td></tr>
+        <tr><td><code>BlobArchived</code></td><td>Bloben ligger i Archive. Det er meningen i steg 4. Den må rehydreres før den kan leses</td></tr>
+        <tr><td>403 på SAS-URL-en før du har trukket den tilbake</td><td>SAS-en har gått ut, policyen er slettet eller nettopp laget, eller brannmuren stopper deg. En ny policy kan bruke 30 sekunder på å virke. Vent litt, eller lag en ny SAS</td></tr>
+        <tr><td>Ingenting dukker opp i <code>kopi</code></td><td>Replikeringen går i bakgrunnen og kan ta flere minutter. Sjekk at regelen står på begge accountene, og at bloben ikke ligger i Archive</td></tr>
+        <tr><td><code>Test-NetConnection</code> svarer <code>False</code></td><td>Port 445 er stengt i nettverket du sitter på. Det er forventet. Bruk portalen eller <code>az</code></td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-04</code>, og sett <code>$RG</code> på nytt. <code>$SA</code> henter du med siste linje i steg 1, og <code>$KEY</code> med siste linje i steg 5. <code>$SAID</code> og <code>$MEG</code> står i steg 3, og <code>$SA2</code> er <code>"$($SA)kopi"</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er storage accounten fra steg 1, 2, 10 og 11, og <code>livssyklus.json</code> er regelen
+    fra steg 12. Resten står under <b>Vis kommando</b> i hvert steg.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
+    <a class="btn-lenke sekundaer" href="livssyklus.json" download>livssyklus.json</a>
   </div>
 </section>
 
@@ -108,8 +581,13 @@
 <section id="kunnskapssjekk">
   <div class="eyebrow">Siste bolk</div>
   <h2>Kunnskapssjekk</h2>
-  <p>Ta module assessment for hver Learn-modul, og ta med ett spørsmål du bommet på eller var usikker på. Lenkene står i tabellen under <a href="#forberedelse">Forberedelse</a>.</p>
-  <div class="callout info">Spørsmålene vi lager til møtet, legges ut her etter mandag.</div>
+  <p>Ta module assessment for hver Learn-modul, og ta med ett spørsmål du bommet på eller var usikker på:</p>
+  <ul>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/configure-storage-accounts/8-knowledge-check">Configure storage accounts</a></li>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/configure-blob-storage/10-knowledge-check">Configure Azure Blob Storage</a></li>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/configure-storage-security/9-knowledge-check">Configure Azure Storage security</a></li>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/configure-azure-files-file-sync/8-knowledge-check">Configure Azure Files</a></li>
+  </ul>
 </section>
 
 <!-- ======================================================================
@@ -118,9 +596,13 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>
+    Rolletildelingen, brannmuren, lifecycle-regelen og replikeringen forsvinner sammen med storage accountene. Soft delete hindrer ikke
+    slettingen.
+  </p>
+<pre><code>az group delete --name $RG --yes --no-wait</code></pre>
+  <p>Sjekk etter et par minutter at ingenting står igjen:</p>
+<pre><code>az group list -o table</code></pre>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">
