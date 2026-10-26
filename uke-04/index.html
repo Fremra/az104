@@ -469,7 +469,8 @@ az storage account management-policy create --account-name $SA -g $RG --policy "
 <pre><code>az storage share-rm create --storage-account $SA -g $RG --name felles --quota 10 --query shareQuota -o tsv
 az storage file upload --account-name $SA --account-key $KEY --share-name felles --source hei.txt --no-progress -o none
 az storage share-rm snapshot --storage-account $SA -g $RG --name felles --query snapshotTime -o tsv
-Test-NetConnection "$SA.file.core.windows.net" -Port 445 -InformationLevel Quiet
+Test-NetConnection "$SA.file.core.windows.net" -Port 445 -InformationLevel Quiet      <span class="kom"># lokalt</span>
+Test-Connection "$SA.file.core.windows.net" -TcpPort 445 -Quiet                       <span class="kom"># Cloud Shell</span>
 az storage share-rm delete --storage-account $SA -g $RG --name felles --include snapshots --yes
 az storage share-rm list --storage-account $SA -g $RG --include-deleted --query "[].{navn:name, slettet:deleted}" -o table</code></pre>
   <p>
@@ -552,7 +553,7 @@ az storage blob list --account-name $SA2 -c kopi --auth-mode key --query "[].nam
         <tr><td><code>BlobArchived</code></td><td>Bloben ligger i Archive. Det er meningen i steg 4. Den må rehydreres før den kan leses</td></tr>
         <tr><td>403 på SAS-URL-en før du har trukket den tilbake</td><td>SAS-en har gått ut, policyen er slettet eller nettopp laget, eller brannmuren stopper deg. En ny policy kan bruke 30 sekunder på å virke. Vent litt, eller lag en ny SAS</td></tr>
         <tr><td>Ingenting dukker opp i <code>kopi</code></td><td>Replikeringen går i bakgrunnen og kan ta flere minutter. Sjekk at regelen står på begge accountene, og at bloben ikke ligger i Archive</td></tr>
-        <tr><td><code>Test-NetConnection</code> svarer <code>False</code></td><td>Port 445 er stengt i nettverket du sitter på. Det er forventet. Bruk portalen eller <code>az</code></td></tr>
+        <tr><td>Porttesten i steg 13 svarer <code>False</code></td><td>Port 445 er stengt i nettverket du sitter på. Det er forventet. Bruk portalen eller <code>az</code></td></tr>
         <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-04</code>, og sett <code>$RG</code> på nytt. <code>$SA</code> henter du med siste linje i steg 1, og <code>$KEY</code> med siste linje i steg 5. <code>$SAID</code> og <code>$MEG</code> står i steg 3, og <code>$SA2</code> er <code>"$($SA)kopi"</code></td></tr>
       </tbody>
     </table>
