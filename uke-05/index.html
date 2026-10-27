@@ -32,6 +32,7 @@
     <a href="../#ukeplan">← Alle uker</a>
     <a href="#forberedelse">Forberedelse</a>
     <a href="#lab">Lab</a>
+    <a href="#fasit">Fasit</a>
     <a href="#kunnskapssjekk">Kunnskapssjekk</a>
     <a href="#opprydding">Opprydding</a>
   </nav>
@@ -95,10 +96,462 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>VM-er, scale sets og App Service plan</h2>
+  <p class="section-lead">
+    De tre Learn-modulene har bare én øvelse, så her er en egen lab. Hvert steg er en oppgave du løser i
+    portalen. Står du fast, eller vil du sjekke resultatet, ligger kommandoen under <b>Vis kommando</b>. Del A er
+    en VM i Bicep, del B er drift av den: størrelse, disker, kryptering og flytting, og del C er availability set,
+    scale set og App Service plan. Fasiten ligger <a href="#fasit">under labben</a>.
+  </p>
+
+  <h3>Før møtet</h3>
+  <p>
+    Samme oppsett som i <a href="../uke-02/#lab">uke 2</a>: portalen i et privat vindu med lab-brukeren, og
+    <code>az</code> lokalt med kursprofilen eller i Cloud Shell. Lag en mappe til labben, og sett variablene
+    én gang:
+  </p>
+<pre><code>mkdir uke-05
+cd uke-05
+$RG = "rg-uke05"
+$RG2 = "rg-uke05-flytt"
+$L = "swedencentral"
+$PASSORD = "Az-$([guid]::NewGuid())"</code></pre>
+  <p>
+    Vi bruker Sweden Central denne uka. Norway East har ingen ledige små VM-størrelser for subscriptionene våre.
+    <code>$PASSORD</code> er et tilfeldig passord til VM-ene. Vi logger ikke inn på dem, så du trenger ikke å huske
+    det. Tjenestene i portalen finner du raskest i søkefeltet øverst.
+  </p>
+
+  <h3>Del A — VM i Bicep (ca. 15 min)</h3>
+
+  <h4>0. Registrer Microsoft.Compute og encryption at host</h4>
+  <p>
+    <b>Hvorfor:</b> ingen av oss har laget en VM i subscriptionen ennå, så resource provideren for VM-er er ikke
+    registrert. Encryption at host, som vi bruker i steg 6, er en funksjon som må skrus på for subscriptionen før
+    den kan brukes.
+  </p>
+  <p>
+    <b>Oppgave:</b> dette steget gjør du med <code>az</code>. Registrer featuren først og så provideren, ellers blir
+    ikke featuren med. Står featuren som <i>Registering</i>, går du videre og kjører de to siste linjene igjen før
+    steg 6.
+  </p>
+<pre><code>az feature register --namespace Microsoft.Compute --name EncryptionAtHost --query properties.state -o tsv
+az provider register --namespace Microsoft.Compute
+az provider show --namespace Microsoft.Compute --query registrationState -o tsv</code></pre>
+
+  <h4>1. VM i Bicep</h4>
+  <p>
+    <b>Hvorfor:</b> en VM er flere ressurser: selve VM-en, et nettverkskort (NIC), en OS-disk og et VNet.
+    Bicep-fila lager alle sammen, og i tillegg en auto-shutdown-plan som slår av VM-en kl. 20 hver kveld, i tilfelle
+    den blir glemt. VM-en står i availability zone 1 og har ingen offentlig IP.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke05</code> i Sweden Central, og deploy fila under. Åpne VM-en i portalen, og finn
+    størrelsen, sonen og OS-disken under <b>Overview</b> og tidspunktet under <b>Operations → Auto-shutdown</b>.
+  </p>
+<pre><code>@'
+@description('Størrelsen på VM-en')
+param vmSize string = 'Standard_D2als_v6'
+
+@description('Brukernavnet til administratoren')
+param adminUsername string = 'azureuser'
+
+@secure()
+@description('Passordet til administratoren. Vi logger ikke inn, så det trengs bare når VM-en lages')
+param adminPassword string
+
+resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'vnet-uke05'
+  location: resourceGroup().location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [ '10.5.0.0/16' ]
+    }
+    subnets: [
+      {
+        name: 'default'
+        properties: {
+          addressPrefix: '10.5.0.0/24'
+        }
+      }
+    ]
+  }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
+  name: 'vm1-nic'
+  location: resourceGroup().location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          subnet: {
+            id: '${vnet.id}/subnets/default'
+          }
+        }
+      }
+    ]
+  }
+}
+
+resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
+  name: 'vm1'
+  location: resourceGroup().location
+  zones: [ '1' ]
+  properties: {
+    hardwareProfile: {
+      vmSize: vmSize
+    }
+    osProfile: {
+      computerName: 'vm1'
+      adminUsername: adminUsername
+      adminPassword: adminPassword
+    }
+    storageProfile: {
+      imageReference: {
+        publisher: 'Canonical'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
+        version: 'latest'
+      }
+      osDisk: {
+        name: 'vm1-osdisk'
+        createOption: 'FromImage'
+        deleteOption: 'Delete'
+        managedDisk: {
+          storageAccountType: 'StandardSSD_LRS'
+        }
+      }
+    }
+    networkProfile: {
+      networkInterfaces: [
+        {
+          id: nic.id
+          properties: {
+            deleteOption: 'Delete'
+          }
+        }
+      ]
+    }
+  }
+}
+
+resource autoShutdown 'Microsoft.DevTestLab/schedules@2018-09-15' = {
+  name: 'shutdown-computevm-vm1'
+  location: resourceGroup().location
+  properties: {
+    status: 'Enabled'
+    taskType: 'ComputeVmShutdownTask'
+    dailyRecurrence: {
+      time: '2000'
+    }
+    timeZoneId: 'W. Europe Standard Time'
+    targetResourceId: vm.id
+    notificationSettings: {
+      status: 'Disabled'
+    }
+  }
+}
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>az group create --name $RG --location $L --query properties.provisioningState -o tsv
+az deployment group what-if -g $RG --template-file main.bicep --parameters adminPassword=$PASSORD
+az deployment group create -g $RG --name vm --template-file main.bicep --parameters adminPassword=$PASSORD `
+  --query properties.provisioningState -o tsv</code></pre>
+  <p>Deployen tok under to minutter i testen.</p>
+
+  <h4>2. Run command</h4>
+  <p>
+    <b>Hvorfor:</b> VM-en har ingen offentlig IP, så du kommer ikke inn med SSH. Run command kjører et skript i
+    VM-en gjennom VM-agenten, uten nettverk og uten passord.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Operations → Run command → RunShellScript</b>, og kjør
+    <code>nproc; free -m; lsblk -d -o NAME,SIZE</code>. Du ser antall vCPU-er, minnet i MB og disken. Svaret kommer
+    etter et halvt minutt. <code>sr0</code> er en liten virtuell CD som Azure bruker når VM-en settes opp.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm run-command invoke -g $RG -n vm1 --command-id RunShellScript --scripts "nproc; free -m; lsblk -d -o NAME,SIZE" `
+  --query "value[0].message" -o tsv</code></pre>
+  </div></details>
+
+  <h3>Del B — Drift (ca. 25 min)</h3>
+
+  <h4>3. Bytt størrelse</h4>
+  <p>
+    <b>Hvorfor:</b> størrelsen bestemmer vCPU-er, minne og pris. VM-en starter på nytt når du bytter. Finnes ikke den
+    nye størrelsen på maskinvaren VM-en står på, må du deallokere den først. Kvoten teller vCPU-er per region og per
+    familie, og hos oss er grensen 10 vCPU-er i regionen.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Availability + scale → Size</b>, og se hvilke størrelser du kan velge, uten å lagre.
+    Kjør så what-if med <code>Standard_D2as_v6</code>, som har dobbelt så mye minne, og deploy. Sjekk minnet med Run
+    command igjen.
+  </p>
+<pre><code>az deployment group what-if -g $RG --template-file main.bicep --parameters adminPassword=$PASSORD vmSize=Standard_D2as_v6
+az deployment group create -g $RG --name vm --template-file main.bicep `
+  --parameters adminPassword=$PASSORD vmSize=Standard_D2as_v6 --query properties.provisioningState -o tsv</code></pre>
+  <p>Endringen som betyr noe i what-if, er <code>vmSize</code>. Resten er støy.</p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm list-vm-resize-options -g $RG -n vm1 --query "[?contains(name, '_D2a')].name" -o tsv
+az vm run-command invoke -g $RG -n vm1 --command-id RunShellScript --scripts "free -m" --query "value[0].message" -o tsv</code></pre>
+  </div></details>
+
+  <h4>4. Datadisk</h4>
+  <p>
+    <b>Hvorfor:</b> OS-disken er til operativsystemet. Data legger du på egne managed disks, som kan kobles til mens
+    VM-en kjører. Disktypen (Standard HDD, Standard SSD, Premium SSD, Premium SSD v2 og Ultra Disk) og størrelsen
+    bestemmer ytelse og pris. En disk kan gjøres større, men aldri mindre. En ny disk må formateres i
+    operativsystemet før den kan brukes.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Settings → Disks</b>, og velg <b>Create and attach a new disk</b>: <code>vm1-data</code>,
+    Standard SSD og 4 GiB. Lagre, og se den nye disken med Run command (<code>lsblk -d -o NAME,SIZE</code>). Gjør den
+    så 8 GiB under <b>Size + performance</b> på disken, og kjør Run command igjen. VM-en kjører hele tiden.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm disk attach -g $RG --vm-name vm1 --name vm1-data --new --size-gb 4 --sku StandardSSD_LRS
+az vm run-command invoke -g $RG -n vm1 --command-id RunShellScript --scripts "lsblk -d -o NAME,SIZE" --query "value[0].message" -o tsv
+az disk update -g $RG -n vm1-data --size-gb 8 --query diskSizeGB -o tsv
+az vm run-command invoke -g $RG -n vm1 --command-id RunShellScript --scripts "lsblk -d -o NAME,SIZE" --query "value[0].message" -o tsv</code></pre>
+  <p>Disken havner i samme sone som VM-en. En disk i en annen sone kan ikke kobles til.</p>
+  </div></details>
+
+  <h4>5. Deallokér</h4>
+  <p>
+    <b>Hvorfor:</b> slår du av VM-en fra operativsystemet, står den som <i>Stopped</i>, og du betaler fortsatt for
+    den. <b>Stop</b> i portalen og <code>az vm deallocate</code> gir <i>Stopped (deallocated)</i>, og da betaler du
+    bare for diskene. Noen endringer krever en deallokert VM, som å bytte disktype på en disk som er koblet til.
+  </p>
+  <p>
+    <b>Oppgave:</b> prøv å bytte <code>vm1-data</code> til Premium SSD under <b>Size + performance</b> mens VM-en
+    kjører. Det går ikke. Stopp VM-en (<b>Stop</b> under <b>Overview</b>), og bytt igjen. La den stå stoppet til
+    steg 6.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az disk update -g $RG -n vm1-data --sku Premium_LRS --query sku.name -o tsv      <span class="kom"># feiler</span>
+az vm deallocate -g $RG -n vm1
+az disk update -g $RG -n vm1-data --sku Premium_LRS --query sku.name -o tsv</code></pre>
+  </div></details>
+
+  <h4>6. Encryption at host</h4>
+  <p>
+    <b>Hvorfor:</b> managed disks er alltid kryptert der de lagres. Encryption at host krypterer i tillegg
+    disk-cachen og den midlertidige disken på serveren VM-en kjører på, så dataene er kryptert hele veien fra VM-en
+    til lagringen. Studieguiden nevner encryption at host i stedet for Azure Disk Encryption, som Microsoft fjerner
+    i 2028. Det kan bare skrus på når VM-en er deallokert.
+  </p>
+  <p>
+    <b>Oppgave:</b> med VM-en fortsatt stoppet, åpne <b>Settings → Disks → Additional settings</b>, og sett
+    <b>Encryption at host</b> til <i>Yes</i>. Start VM-en, og se at den står som <i>Running</i>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm update -g $RG -n vm1 --set securityProfile.encryptionAtHost=true --query securityProfile.encryptionAtHost -o tsv
+az vm start -g $RG -n vm1
+az vm get-instance-view -g $RG -n vm1 --query "instanceView.statuses[1].displayStatus" -o tsv</code></pre>
+  </div></details>
+
+  <h4>7. Flytt VM-en</h4>
+  <p>
+    <b>Hvorfor:</b> en VM kan flyttes til en annen resource group eller subscription, men NIC-en og diskene må bli
+    med. Til en annen resource group kan VNet-et bli igjen, til en annen subscription må det også flyttes.
+    Ressurs-id-en endres, så skript og annet som peker på den gamle id-en, må oppdateres. Til en annen region
+    flytter du med Azure Resource Mover, eller du lager VM-en på nytt der. Eksamen spør hva som må flyttes sammen.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke05-flytt</code>. Åpne <code>rg-uke05</code>, merk <code>vm1</code>,
+    <code>vm1-nic</code>, <code>vm1-osdisk</code>, <code>vm1-data</code> og <code>shutdown-computevm-vm1</code>, og
+    velg <b>Move → Move to another resource group</b>. Flyttingen tok fire–fem minutter i testen, og VM-en kjørte
+    hele tiden. Gå videre til del C mens den går.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az group create --name $RG2 --location $L --query properties.provisioningState -o tsv
+$IDER = az resource list -g $RG --query "[?contains(name, 'vm1')].id" -o tsv | ForEach-Object { $_.ToLower() }
+az resource move --destination-group $RG2 --ids $IDER
+az resource list -g $RG2 --query "[].name" -o tsv</code></pre>
+  <p>
+    <code>az</code> krever at navnet på resource groupen er skrevet likt i alle id-ene, og OS-disken har det med
+    store bokstaver. Derfor <code>ToLower()</code>. Kommandoen venter til flyttingen er ferdig.
+  </p>
+  </div></details>
+
+  <h3>Del C — Tilgjengelighet og skalering (ca. 20 min)</h3>
+
+  <h4>8. Availability set</h4>
+  <p>
+    <b>Hvorfor:</b> et availability set sprer VM-ene i ett datasenter på fault domains (eget rack med strøm og
+    nettverk, høyst 3) og update domains (startes på nytt én om gangen ved vedlikehold, høyst 20). En availability
+    zone er ett eller flere egne datasentre i regionen. SLA-en er 99,95 % med availability set og 99,99 % med VM-er
+    i to eller flere soner. En VM står enten i en sone eller i et availability set, og det velges når VM-en lages.
+    En VM som finnes, kan ikke legges inn i et availability set etterpå.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag availability setet <code>as-uke05</code> i <code>rg-uke05</code> med 2 fault domains og 5
+    update domains. Lag så <code>vm2</code> i samme resource group med <b>Create → Virtual machine</b>: availability setet, Ubuntu
+    Server 24.04 LTS, <code>Standard_D2als_v6</code> og <i>Password</i> med et passord du finner på. Velg
+    <code>vnet-uke05</code> og <i>None</i> som public IP under <b>Networking</b>, og slå på auto-shutdown under
+    <b>Management</b>. Se til slutt under <code>as-uke05</code> hvilket fault domain og update domain
+    <code>vm2</code> fikk.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm availability-set create -g $RG -n as-uke05 --platform-fault-domain-count 2 --platform-update-domain-count 5 `
+  --query "{fd:platformFaultDomainCount, ud:platformUpdateDomainCount}" -o json
+az network nic create -g $RG -n vm2-nic --vnet-name vnet-uke05 --subnet default --query NewNIC.provisioningState -o tsv
+az vm create -g $RG -n vm2 --availability-set as-uke05 --nics vm2-nic --image Ubuntu2404 --size Standard_D2als_v6 `
+  --storage-sku StandardSSD_LRS --admin-username azureuser --admin-password $PASSORD --query powerState -o tsv
+az vm auto-shutdown -g $RG -n vm2 --time 1900 --query dailyRecurrence.time -o tsv      <span class="kom"># UTC, altså kl. 20 her</span>
+az vm get-instance-view -g $RG -n vm2 --query "instanceView.{fd:platformFaultDomain, ud:platformUpdateDomain}" -o json</code></pre>
+  <p>NIC-en lages først, så <code>az vm create</code> ikke lager offentlig IP og NSG.</p>
+  </div></details>
+
+  <h4>9. Scale set</h4>
+  <p>
+    <b>Hvorfor:</b> et scale set er en gruppe like VM-er som kan skaleres etter regler. Med <i>Flexible
+    orchestration</i>, som er standard nå, blir instansene vanlige VM-er du ser i resource groupen, og de kan spres
+    på soner. Autoscale har et minimum, et maksimum og et standardantall, og regler for når det skal skaleres ut og
+    inn. Eksamen gir deg gjerne en regel og spør hvor mange instanser du ender med.
+  </p>
+  <p>
+    <b>Oppgave:</b> deploy fila under. Den gir to instanser i hver sin sone. Åpne <code>vmss-uke05</code> →
+    <b>Availability + scale → Scaling</b>, og velg <i>Custom autoscale</i>: minimum 1, maksimum 3 og standard 2.
+    Legg til en regel som legger til én instans når CPU er over 70 % i snitt i 5 minutter, og en som fjerner én når
+    den er under 30 %. Lagre, og følg med under <b>Instances</b>. VM-ene gjør ingenting, så etter noen minutter står
+    det én igjen. Maksimum 3 er det kvoten tåler: <code>vm1</code>, <code>vm2</code> og tre instanser er 10 vCPU-er.
+  </p>
+<pre><code>@'
+@description('Brukernavnet til administratoren')
+param adminUsername string = 'azureuser'
+
+@secure()
+@description('Passordet til administratoren. Vi logger ikke inn, så det trengs bare når instansene lages')
+param adminPassword string
+
+resource subnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = {
+  name: 'vnet-uke05/default'
+}
+
+resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-07-01' = {
+  name: 'vmss-uke05'
+  location: resourceGroup().location
+  zones: [ '1', '2', '3' ]
+  sku: {
+    name: 'Standard_D2als_v6'
+    capacity: 2
+  }
+  properties: {
+    orchestrationMode: 'Flexible'
+    platformFaultDomainCount: 1
+    virtualMachineProfile: {
+      osProfile: {
+        computerNamePrefix: 'vmss'
+        adminUsername: adminUsername
+        adminPassword: adminPassword
+      }
+      storageProfile: {
+        imageReference: {
+          publisher: 'Canonical'
+          offer: 'ubuntu-24_04-lts'
+          sku: 'server'
+          version: 'latest'
+        }
+        osDisk: {
+          createOption: 'FromImage'
+          deleteOption: 'Delete'
+          managedDisk: {
+            storageAccountType: 'StandardSSD_LRS'
+          }
+        }
+      }
+      networkProfile: {
+        networkApiVersion: '2024-05-01'
+        networkInterfaceConfigurations: [
+          {
+            name: 'nic'
+            properties: {
+              primary: true
+              deleteOption: 'Delete'
+              ipConfigurations: [
+                {
+                  name: 'ipconfig1'
+                  properties: {
+                    subnet: {
+                      id: subnet.id
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+'@ | Set-Content vmss.bicep -Encoding utf8</code></pre>
+<pre><code>az deployment group create -g $RG --name vmss --template-file vmss.bicep --parameters adminPassword=$PASSORD `
+  --query properties.provisioningState -o tsv</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm list -g $RG --query "[?contains(name, 'vmss')].{navn:name, sone:zones[0]}" -o table
+$VMSS = az vmss show -g $RG -n vmss-uke05 --query id -o tsv
+az monitor autoscale create -g $RG --resource $VMSS --name skaler-vmss --min-count 1 --max-count 3 --count 2 -o none
+az monitor autoscale rule create -g $RG --autoscale-name skaler-vmss --condition "Percentage CPU &gt; 70 avg 5m" --scale out 1 -o none
+az monitor autoscale rule create -g $RG --autoscale-name skaler-vmss --condition "Percentage CPU &lt; 30 avg 5m" --scale in 1 -o none
+az vmss show -g $RG -n vmss-uke05 --query sku.capacity -o tsv      <span class="kom"># kjør igjen etter noen minutter</span></code></pre>
+  </div></details>
+
+  <h4>10. App Service plan</h4>
+  <p>
+    <b>Hvorfor:</b> en App Service plan er maskinene web-appene kjører på, og alle appene i planen deler dem. Tieren
+    bestemmer hva du får: Free og Shared kan ikke skaleres ut, Basic kan skaleres manuelt til 3 instanser, Standard
+    til 10 med autoscale, og Premium til 30. Scale up er en større tier, scale out er flere instanser. Selve App
+    Service tar vi i uke 6.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en Linux-plan <code>plan-uke05</code> i <code>rg-uke05</code> med Basic B1 (søk etter
+    <i>App Service plans</i>). Skaler ut til 2 instanser under <b>Scale out</b>, og se hvor høyt du kan gå. Skaler så
+    opp til Standard S1 under <b>Scale up</b>, og se at <b>Scale out</b> nå går til 10 og har regelbasert autoscale.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az appservice plan create -g $RG -n plan-uke05 --sku B1 --is-linux --query sku.name -o tsv
+az appservice plan update -g $RG -n plan-uke05 --number-of-workers 2 --query sku.capacity -o tsv
+az appservice plan update -g $RG -n plan-uke05 --number-of-workers 4 --query sku.capacity -o tsv      <span class="kom"># feiler</span>
+az appservice plan update -g $RG -n plan-uke05 --sku S1 --query sku.name -o tsv</code></pre>
+  </div></details>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td><code>SkuNotAvailable</code></td><td>Størrelsen er ikke ledig i regionen. Sjekk at <code>$L</code> er <code>swedencentral</code>, og at resource groupen ligger der. Bicep-fila bruker regionen til resource groupen</td></tr>
+        <tr><td><code>exceeding approved ... Cores quota</code></td><td>Mer enn 10 vCPU-er i regionen. Slett VM-er du ikke trenger, eller senk maksimum i autoscale</td></tr>
+        <tr><td><code>Cannot change account type ... while it is attached to running VM</code></td><td>Disktypen i steg 5. Stopp VM-en først</td></tr>
+        <tr><td><code>can be updated only when VM is in deallocated state</code></td><td>Encryption at host i steg 6. Stopp VM-en først</td></tr>
+        <tr><td>Feil om at featuren <code>EncryptionAtHost</code> ikke er skrudd på</td><td>Featuren var ikke ferdig registrert da du registrerte provideren i steg 0. Kjør de to siste linjene i steg 0 igjen</td></tr>
+        <tr><td><code>All resources should be under the same group</code></td><td><code>az resource move</code> i steg 7 uten <code>ToLower()</code>. Bruk kommandoen slik den står</td></tr>
+        <tr><td><code>ResourceNotFound</code> for <code>vm1</code></td><td>VM-en er flyttet i steg 7. Bruk <code>-g $RG2</code></td></tr>
+        <tr><td><code>Number of Web workers exceeds the maximum allowed</code></td><td>Det er meningen i steg 10. Basic har høyst 3 instanser</td></tr>
+        <tr><td><code>App Service Plan Update operation is throttled</code></td><td>For mange endringer på planen på kort tid. Vent et minutt, og kjør linjen igjen</td></tr>
+        <tr><td>Run command svarer ikke</td><td>VM-agenten svarer bare når VM-en kjører. Vent til den står som <i>Running</i></td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-05</code>, og kjør linjene fra <b>Før møtet</b> på nytt. Et nytt <code>$PASSORD</code> går fint, det gamle trengs ikke når VM-ene først er laget. <code>$VMSS</code> står i steg 9</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er VM-en fra steg 1 og 3, og <code>vmss.bicep</code> er scale setet fra steg 9. Resten
+    står under <b>Vis kommando</b> i hvert steg.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
+    <a class="btn-lenke sekundaer" href="vmss.bicep" download>vmss.bicep</a>
   </div>
 </section>
 
@@ -108,8 +561,12 @@
 <section id="kunnskapssjekk">
   <div class="eyebrow">Siste bolk</div>
   <h2>Kunnskapssjekk</h2>
-  <p>Ta module assessment for hver Learn-modul, og ta med ett spørsmål du bommet på eller var usikker på. Lenkene står i tabellen under <a href="#forberedelse">Forberedelse</a>.</p>
-  <div class="callout info">Spørsmålene vi lager til møtet, legges ut her etter mandag.</div>
+  <p>Ta module assessment for hver Learn-modul, og ta med ett spørsmål du bommet på eller var usikker på:</p>
+  <ul>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/intro-to-azure-virtual-machines/7-knowledge-check">Introduction to Azure virtual machines</a></li>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/configure-virtual-machine-availability/11-knowledge-check">Configure virtual machine availability</a></li>
+    <li><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/training/modules/configure-app-service-plans/6-knowledge-check">Configure Azure App Service plans</a></li>
+  </ul>
 </section>
 
 <!-- ======================================================================
@@ -118,9 +575,19 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>
+    Autoscale, auto-shutdown og diskene forsvinner sammen med resource groupene. Slett <code>rg-uke05-flytt</code>
+    først. NIC-en til <code>vm1</code> bruker VNet-et i <code>rg-uke05</code>, og VNet-et kan ikke slettes før NIC-en
+    er borte. Første linje venter til gruppen er slettet, og det tok et par minutter i testen.
+  </p>
+<pre><code>az group delete --name $RG2 --yes
+az group delete --name $RG --yes --no-wait</code></pre>
+  <p>Sjekk etter et par minutter at ingenting står igjen:</p>
+<pre><code>az group list -o table</code></pre>
+  <p>
+    <code>NetworkWatcherRG</code> lages av seg selv sammen med det første VNet-et i en region. Den er gratis og kan
+    stå, det samme kan featuren og resource provideren.
+  </p>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">
