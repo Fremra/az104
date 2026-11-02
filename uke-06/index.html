@@ -32,6 +32,7 @@
     <a href="../#ukeplan">← Alle uker</a>
     <a href="#forberedelse">Forberedelse</a>
     <a href="#lab">Lab</a>
+    <a href="#fasit">Fasit</a>
     <a href="#kunnskapssjekk">Kunnskapssjekk</a>
     <a href="#opprydding">Opprydding</a>
   </nav>
@@ -48,7 +49,9 @@
   </div>
 </div>
 
-  <div class="callout info">Learn har ingen modul om Container Apps i AZ-104-stiene. Duffy-seksjon 16 dekker det.</div>
+  <div class="callout info">Learn har ingen egen modul om Container Apps eller Container Registry i AZ-104-stiene. ACI-modulen har en enhet om Container Apps, Duffy-seksjon 16 dekker begge, og Duffy har ingen egen forelesning om deployment slots.</div>
+
+  <div class="callout warn">Planen koster rundt 0,10 USD i timen per instans, og registryet rundt 0,17 USD i døgnet. Slett alt før vi går.</div>
 
 <!-- ======================================================================
      Forberedelse
@@ -94,10 +97,453 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>App Service, Container Registry, Container Instances og Container Apps</h2>
+  <p class="section-lead">
+    Learn-øvelsene dekker ikke alt studieguiden spør om, så her er en egen lab. Hvert steg er en oppgave du løser i
+    portalen. Står du fast, eller vil du sjekke resultatet, ligger kommandoen under <b>Vis kommando</b>. Del A er
+    App Service, og del B er containere. Går tiden fra deg, hopp over steg 9 og 11. Fasiten ligger
+    <a href="#fasit">under labben</a>.
+  </p>
+
+  <h3>Før møtet</h3>
+  <p>
+    Samme oppsett som i <a href="../uke-02/#lab">uke 2</a>: portalen i et privat vindu med lab-brukeren, og
+    <code>az</code> lokalt med kursprofilen eller i Cloud Shell. Lag en mappe til labben, og sett variablene.
+    Web-appen, registryet og storage accounten trenger navn som er unike i hele Azure, så vi bruker starten av
+    subscription-id-en din. Da får du samme navn hvis du må kjøre linjene på nytt.
+  </p>
+<pre><code>mkdir uke-06
+cd uke-06
+$RG = "rg-uke06"
+$L = "swedencentral"
+$ID = (az account show --query id -o tsv).Substring(0,6)
+$APP = "app-uke06-$ID"
+$ACR = "acruke06$ID"
+$ST = "stuke06$ID"</code></pre>
+  <p>
+    Registrer også resource providerne før møtet, så du slipper ventetiden der. Det tok under to minutter i testen.
+  </p>
+<pre><code>$P = "Microsoft.Web","Microsoft.ContainerInstance","Microsoft.ContainerRegistry","Microsoft.App","Microsoft.OperationalInsights"
+$P | ForEach-Object { az provider register --namespace $_ }
+$P | ForEach-Object { az provider show --namespace $_ --query registrationState -o tsv }</code></pre>
+
+  <h3>Del A — App Service (ca. 30 min)</h3>
+
+  <h4>1. Web app i Bicep</h4>
+  <p>
+    <b>Hvorfor:</b> en web-app er to ressurser: planen, som er maskinene (se <a href="../uke-05/#lab">uke 5, steg 10</a>),
+    og selve appen, som kjører på dem. Deployment Center er stedet der du kobler appen til koden, med GitHub,
+    Bitbucket, Azure Repos eller lokal Git som kilde. Vi laster opp en zip-fil direkte, så vi slipper å sette opp et
+    repo. Siden skriver ut en connection string og en app setting, så du kan se hva en swap gjør i steg 2.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke06</code> i Sweden Central, og deploy fila under. Åpne web-appen, og se under
+    <b>Deployment → Deployment Center</b> hvilke kilder du kan velge, uten å lagre. Gå så til
+    <b>Settings → Environment variables</b>. Under <b>Connection strings</b> legger du til <code>DB</code> med verdien
+    <code>database-1</code> og typen <i>Custom</i>. Under <b>App settings</b> legger du til <code>MILJO</code> med
+    verdien <code>produksjon</code> og krysser av for <b>Deployment slot setting</b>. Last så opp koden, og åpne
+    adressen under <b>Overview</b>.
+  </p>
+<pre><code>@'
+@description('Navnet på web-appen. Må være unikt i hele Azure')
+param appName string
+
+@description('Tieren til App Service-planen. Slots og autoscale krever Standard eller høyere')
+param sku string = 'S1'
+
+resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
+  name: 'plan-uke06'
+  location: resourceGroup().location
+  kind: 'linux'
+  sku: {
+    name: sku
+    capacity: 1
+  }
+  properties: {
+    reserved: true
+  }
+}
+
+resource app 'Microsoft.Web/sites@2024-04-01' = {
+  name: appName
+  location: resourceGroup().location
+  kind: 'app,linux'
+  properties: {
+    serverFarmId: plan.id
+    siteConfig: {
+      linuxFxVersion: 'PHP|8.4'
+    }
+  }
+}
+
+output url string = 'https://${app.properties.defaultHostName}'
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>az group create --name $RG --location $L --query properties.provisioningState -o tsv
+az deployment group create -g $RG --name app --template-file main.bicep --parameters appName=$APP `
+  --query properties.outputs.url.value -o tsv</code></pre>
+  <p>Koden lager du og laster opp slik. Første opplasting tok tre minutter i testen, fordi appen må starte.</p>
+<pre><code>'&lt;?php echo "Versjon 1 | DB=" . getenv("CUSTOMCONNSTR_DB") . " | MILJO=" . getenv("MILJO");' | Set-Content index.php -Encoding ascii
+Compress-Archive -Path index.php -DestinationPath v1.zip -Force
+az webapp deploy -g $RG -n $APP --src-path v1.zip --type zip -o none</code></pre>
+  <p>
+    Siden skal vise <code>Versjon 1 | DB=database-1 | MILJO=produksjon</code>. Connection strings kommer inn i appen
+    som miljøvariabler med et prefiks etter typen, her <code>CUSTOMCONNSTR_</code>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az webapp config connection-string set -g $RG -n $APP -t Custom --settings DB=database-1 -o none
+az webapp config appsettings set -g $RG -n $APP --slot-settings MILJO=produksjon -o none</code></pre>
+  </div></details>
+
+  <h4>2. Deployment slots og swap</h4>
+  <p>
+    <b>Hvorfor:</b> en deployment slot er en egen kopi av appen med egen adresse, på samme plan. Du tester den nye
+    versjonen i <code>staging</code> og bytter den inn i produksjon med en swap, og du kommer tilbake ved å swappe
+    igjen. Slots krever Standard (5 slots) eller Premium (20). Koden flytter seg alltid. De fleste innstillingene
+    følger med, også connection strings, med mindre de er merket <b>Deployment slot setting</b>. Custom domains,
+    scale settings, HTTPS Only og IP-regler følger aldri med. Eksamen spør hva som flytter seg og hva som blir igjen.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Deployment → Deployment slots</b>, og legg til <code>staging</code> med innstillingene
+    klonet fra produksjonsappen. Åpne <b>Environment variables</b> på slotten, og se at <code>DB</code> ble klonet,
+    men ikke <code>MILJO</code>. Endre <code>DB</code> til <code>database-2</code>, og legg til <code>MILJO</code> med
+    verdien <code>staging</code> og <b>Deployment slot setting</b>. Last opp versjon 2 til slotten med kommandoene
+    under. Sammenlign de to adressene, trykk <b>Swap</b>, og sammenlign igjen. Swappen tok to–tre minutter i testen.
+  </p>
+<pre><code>'&lt;?php echo "Versjon 2 | DB=" . getenv("CUSTOMCONNSTR_DB") . " | MILJO=" . getenv("MILJO");' | Set-Content index.php -Encoding ascii
+Compress-Archive -Path index.php -DestinationPath v2.zip -Force
+az webapp deploy -g $RG -n $APP --slot staging --src-path v2.zip --type zip -o none</code></pre>
+  <p>
+    Etter swappen skal produksjon vise <code>Versjon 2 | DB=database-2 | MILJO=produksjon</code>. Koden og
+    connection stringen flyttet seg, men <code>MILJO</code> ble igjen.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az webapp deployment slot create -g $RG -n $APP --slot staging --configuration-source $APP --query name -o tsv
+az webapp config connection-string set -g $RG -n $APP --slot staging -t Custom --settings DB=database-2 -o none
+az webapp config appsettings set -g $RG -n $APP --slot staging --slot-settings MILJO=staging -o none
+az webapp deployment slot swap -g $RG -n $APP --slot staging --target-slot production -o none
+Invoke-RestMethod "https://$APP.azurewebsites.net"
+Invoke-RestMethod "https://$APP-staging.azurewebsites.net"</code></pre>
+  </div></details>
+
+  <h4>3. TLS og custom domain</h4>
+  <p>
+    <b>Hvorfor:</b> HTTPS Only sender all HTTP-trafikk videre til HTTPS, og minimum TLS er 1.2 som standard. Et eget
+    domene krever to DNS-poster: en CNAME (eller en A-post for rotdomenet) som peker på appen, og en TXT-post
+    <code>asuid</code> som beviser at domenet er ditt. Free-tieren kan ikke ha custom domain. Azures gratis
+    managed certificate krever Basic eller høyere og et custom domain, og det støtter ikke wildcard. Vi har ikke noe
+    domene å bruke, så her ser vi bare på dialogen.
+  </p>
+  <p>
+    <b>Oppgave:</b> sett <b>HTTPS Only</b> til <i>On</i> under <b>Settings → Configuration → General settings</b>, og
+    se hva minimum TLS står på. Åpne <code>http://</code>-adressen til appen, og se at du havner på
+    <code>https://</code>. Slotten har sin egen innstilling, så der står HTTPS Only fortsatt av. Åpne
+    <b>Settings → Custom domains → Add custom domain</b>, skriv inn et domene du finner på, og se hvilke poster
+    dialogen ber om. Avbryt.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az webapp update -g $RG -n $APP --https-only true --query httpsOnly -o tsv
+az webapp show -g $RG -n $APP --slot staging --query httpsOnly -o tsv
+az webapp config show -g $RG -n $APP --query minTlsVersion -o tsv
+az webapp config hostname add -g $RG --webapp-name $APP --hostname www.eksempel.no      <span class="kom"># feiler: TXT-posten mangler</span></code></pre>
+  </div></details>
+
+  <h4>4. Backup</h4>
+  <p>
+    <b>Hvorfor:</b> App Service har to typer backup, og begge krever Basic eller høyere. Automatisk backup krever
+    ikke oppsett, går hver time og tas vare på i 30 dager, men kan ikke lastes ned. Custom backup legges i en storage
+    account du velger, kan lastes ned og er på høyst 10 GB. Storage accounten må ligge i samme subscription, og den
+    kan ikke stå bak en brannmur.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Settings → Backups</b>. En ny app har ingen automatiske backuper ennå. Lag en storage
+    account med navnet i <code>$ST</code> og en container <code>backup</code>. Sett opp custom backup i appen mot
+    containeren, og kjør en backup. Se at filene dukker opp i containeren. Backupen tok under halvannet minutt i testen.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage account create -g $RG -n $ST -l $L --sku Standard_LRS --query provisioningState -o tsv
+$KEY = az storage account keys list -g $RG -n $ST --query "[0].value" -o tsv
+az storage container create --account-name $ST --account-key $KEY -n backup -o none
+$SLUTT = (Get-Date).ToUniversalTime().AddDays(1).ToString("yyyy-MM-ddTHH:mmZ")
+$SAS = az storage container generate-sas --account-name $ST --account-key $KEY -n backup --permissions rwdl --expiry $SLUTT -o tsv
+$URL = "https://$ST.blob.core.windows.net/backup?$SAS"
+az webapp config backup create -g $RG --webapp-name $APP --backup-name manuell --container-url "`"$URL`"" -o none      <span class="kom"># lokalt</span>
+az webapp config backup create -g $RG --webapp-name $APP --backup-name manuell --container-url $URL -o none      <span class="kom"># Cloud Shell</span>
+az webapp config backup list -g $RG --webapp-name $APP --query "[].{navn:name, status:status}" -o table
+az storage blob list --account-name $ST --account-key $KEY -c backup --query "[].name" -o tsv</code></pre>
+  <p>Lokalt må adressen ha ekstra anførselstegn, fordi den inneholder <code>&amp;</code>.</p>
+  </div></details>
+
+  <h4>5. Nettverk</h4>
+  <p>
+    <b>Hvorfor:</b> nettverk for App Service deles i inn og ut. Inn styres av access restrictions (IP-regler, høyst
+    512) og private endpoints. Ut styres av VNet integration, som lar appen nå ressurser i et VNet. Subnettet må stå i
+    samme region, være delegert til <code>Microsoft.Web/serverFarms</code> og være minst /28 (/27 hvis portalen lager
+    det). Private endpoints tar vi i uke 7.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Settings → Networking</b>, og legg til en <i>Allow</i>-regel for
+    <code>203.0.113.0/24</code> under tilgangsreglene. Det er ikke din IP, og reglene ender med en <i>Deny</i> for alle
+    andre. Åpne appen (403) og slotten (virker, reglene følger ikke med). Fjern regelen. Lag så VNet-et
+    <code>vnet-uke06</code> med subnettet <code>app</code> på <code>10.6.0.0/28</code>, og koble appen til det under
+    <b>Virtual network integration</b>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az webapp config access-restriction add -g $RG -n $APP --rule-name bare-test --action Allow --ip-address 203.0.113.0/24 --priority 100 -o none
+az webapp config access-restriction show -g $RG -n $APP --query "ipSecurityRestrictions[].{navn:name, handling:action, ip:ipAddress}" -o table
+az webapp config access-restriction remove -g $RG -n $APP --rule-name bare-test -o none
+az network vnet create -g $RG -n vnet-uke06 -l $L --address-prefixes 10.6.0.0/16 --subnet-name app --subnet-prefixes 10.6.0.0/28 -o none
+az network vnet subnet update -g $RG --vnet-name vnet-uke06 -n app --delegations Microsoft.Web/serverFarms -o none
+az webapp vnet-integration add -g $RG -n $APP --vnet vnet-uke06 --subnet app -o none
+az webapp vnet-integration list -g $RG -n $APP --query "[].name" -o tsv</code></pre>
+  </div></details>
+
+  <h4>6. Autoscale</h4>
+  <p>
+    <b>Hvorfor:</b> autoscale settes på planen, ikke på appen, så alle appene og slottene i planen skalerer sammen.
+    Regel-basert autoscale krever Standard eller høyere og virker som i <a href="../uke-05/#lab">uke 5, steg 9</a>.
+    Automatic scaling er en annen metode, der plattformen bestemmer selv, og den krever Premium.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Settings → Scale out</b> og velg <i>Rules Based</i>. Lag en custom autoscale med minimum 2,
+    maksimum 3 og standard 2. Legg til en regel som legger til én instans når CPU er over 70 % i snitt i 5 minutter, og
+    en som fjerner én når den er under 30 %. Lagre. Planen står på 1 instans, som er under minimum, så den går til 2 av
+    seg selv. Det tok under tre minutter i testen. Se det under <b>Run history</b>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>$PLAN = az appservice plan show -g $RG -n plan-uke06 --query id -o tsv
+az monitor autoscale create -g $RG --resource $PLAN --name skaler-plan --min-count 2 --max-count 3 --count 2 -o none
+az monitor autoscale rule create -g $RG --autoscale-name skaler-plan --condition "CpuPercentage &gt; 70 avg 5m" --scale out 1 -o none
+az monitor autoscale rule create -g $RG --autoscale-name skaler-plan --condition "CpuPercentage &lt; 30 avg 5m" --scale in 1 -o none
+az appservice plan show -g $RG -n plan-uke06 --query sku.capacity -o tsv      <span class="kom"># kjør igjen etter noen minutter</span></code></pre>
+  </div></details>
+
+  <h3>Del B — Containere (ca. 25 min)</h3>
+
+  <h4>7. Container Registry</h4>
+  <p>
+    <b>Hvorfor:</b> et registry er der du lagrer dine egne images. Tierene er Basic, Standard og Premium, og bare Premium
+    har geo-replikering og private endpoints. <code>az acr build</code> bygger imaget i Azure, så du trenger ikke Docker
+    på maskinen, og resultatet er det samme som med <code>docker build</code> og <code>docker push</code>.
+    <code>az acr import</code> kopierer et ferdig image fra et annet registry.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag et registry i Basic med navnet i <code>$ACR</code>. Lag de to filene under, og bygg imaget.
+    Importer så <code>aci-helloworld</code>, og se begge under <b>Repositories</b>. Slå på <b>Admin user</b> under
+    <b>Access keys</b>. Den er av som standard, og vi trenger den for å hente imaget i steg 8. Den gir full tilgang, så
+    i ekte miljøer bruker du heller en managed identity med rollen <code>AcrPull</code>.
+  </p>
+<pre><code>'&lt;h1&gt;Versjon 1&lt;/h1&gt;' | Set-Content index.html -Encoding ascii
+@'
+FROM mcr.microsoft.com/azurelinux/base/nginx:1.25
+COPY index.html /usr/share/nginx/html/index.html
+'@ | Set-Content Dockerfile -Encoding ascii
+az acr build -r $ACR -t web:v1 . --no-logs --query status -o tsv</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az acr create -g $RG -n $ACR --sku Basic --query loginServer -o tsv
+az acr import -n $ACR --source mcr.microsoft.com/azuredocs/aci-helloworld:latest --image aci-helloworld:v1
+az acr repository list -n $ACR -o tsv
+az acr update -n $ACR --admin-enabled true --query adminUserEnabled -o tsv</code></pre>
+  </div></details>
+
+  <h4>8. Container Instances</h4>
+  <p>
+    <b>Hvorfor:</b> ACI er den enkleste måten å kjøre en container på, uten VM og uten orkestrering. Den starter
+    raskt, og du betaler for tiden den kjører. Du velger CPU og minne når den lages, og de kan ikke endres etterpå.
+    ACI skalerer heller ikke av seg selv. En container deler kjernen med verten, så trenger du full isolasjon, må du
+    ha en VM.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>aci-web</code> med <b>Create → Container Instance</b>: imaget <code>web:v1</code> fra
+    registryet ditt, 1 vCPU og 1 GiB. Sett DNS-navnet <code>aci-uke06-</code> og verdien av <code>$ID</code> under
+    <b>Networking</b>. Åpne adressen under <b>Overview</b>, og se loggene under <b>Containers</b>. Prøv så å endre CPU
+    med kommandoen under. Det går ikke uten å slette container groupen og lage den på nytt.
+  </p>
+<pre><code>$ACRPASS = az acr credential show -n $ACR --query "passwords[0].value" -o tsv
+az container create -g $RG -n aci-web --image "$ACR.azurecr.io/web:v1" --registry-login-server "$ACR.azurecr.io" `
+  --registry-username $ACR --registry-password $ACRPASS --os-type Linux --cpu 2 --memory 1 --ports 80 `
+  --dns-name-label "aci-uke06-$ID" -o none      <span class="kom"># feiler</span></code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az container create -g $RG -n aci-web --image "$ACR.azurecr.io/web:v1" --registry-login-server "$ACR.azurecr.io" `
+  --registry-username $ACR --registry-password $ACRPASS --os-type Linux --cpu 1 --memory 1 --ports 80 `
+  --dns-name-label "aci-uke06-$ID" -o none
+az container show -g $RG -n aci-web --query ipAddress.fqdn -o tsv
+az container logs -g $RG -n aci-web</code></pre>
+  </div></details>
+
+  <h4>9. Container group og restart policy</h4>
+  <p>
+    <b>Hvorfor:</b> en container group er flere containere på samme vert. De deler IP, porter, livssyklus og lagring,
+    så de når hverandre på <code>localhost</code>, og ressursene legges sammen. Flere containere i en gruppe lager du
+    med Bicep, ARM eller YAML. Restart policy bestemmer hva som skjer når prosessen stopper: <code>Always</code> starter
+    alltid på nytt, <code>OnFailure</code> bare ved feil, og <code>Never</code> lar den stå stoppet. De to siste passer
+    til jobber som skal bli ferdige.
+  </p>
+  <p>
+    <b>Oppgave:</b> deploy fila under. Se de to containerne under <b>Containers</b>, og se i loggen at
+    <code>sidecar</code> får svar fra <code>web</code> på <code>localhost</code>. Den første linjen kan være en feil,
+    hvis <code>web</code> ikke har startet ennå. Lag så to kortvarige containere, og sammenlign. Den ene stopper og blir
+    stående, den andre startes på nytt igjen og igjen.
+  </p>
+<pre><code>@'
+@description('DNS-navnet til container groupen. Må være unikt i regionen')
+param dnsLabel string
+
+@allowed([ 'Always', 'OnFailure', 'Never' ])
+@description('Hva Azure gjør når en container stopper')
+param restartPolicy string = 'OnFailure'
+
+resource gruppe 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
+  name: 'aci-gruppe'
+  location: resourceGroup().location
+  properties: {
+    osType: 'Linux'
+    restartPolicy: restartPolicy
+    ipAddress: {
+      type: 'Public'
+      dnsNameLabel: dnsLabel
+      ports: [
+        {
+          port: 80
+          protocol: 'TCP'
+        }
+      ]
+    }
+    containers: [
+      {
+        name: 'web'
+        properties: {
+          image: 'mcr.microsoft.com/azuredocs/aci-helloworld:latest'
+          ports: [
+            {
+              port: 80
+              protocol: 'TCP'
+            }
+          ]
+          resources: {
+            requests: {
+              cpu: 1
+              memoryInGB: 1
+            }
+          }
+        }
+      }
+      {
+        name: 'sidecar'
+        properties: {
+          image: 'mcr.microsoft.com/azurelinux/busybox:1.36'
+          command: [
+            'sh'
+            '-c'
+            'while true; do wget -q -O - http://localhost:80 | grep -o "Welcome to Azure Container Instances"; sleep 30; done'
+          ]
+          resources: {
+            requests: {
+              cpu: json('0.5')
+              memoryInGB: json('0.5')
+            }
+          }
+        }
+      }
+    ]
+  }
+}
+
+output fqdn string = gruppe.properties.ipAddress.fqdn
+'@ | Set-Content aci.bicep -Encoding utf8</code></pre>
+<pre><code>az deployment group create -g $RG --name aci --template-file aci.bicep --parameters dnsLabel="aci-gruppe-$ID" `
+  --query properties.outputs.fqdn.value -o tsv
+az container logs -g $RG -n aci-gruppe --container-name sidecar
+az container create -g $RG -n aci-jobb --image mcr.microsoft.com/azurelinux/busybox:1.36 --os-type Linux --cpu 1 --memory 1 `
+  --restart-policy Never --command-line "sh -c 'echo Ferdig; exit 0'" -o none
+az container create -g $RG -n aci-feil --image mcr.microsoft.com/azurelinux/busybox:1.36 --os-type Linux --cpu 1 --memory 1 `
+  --restart-policy OnFailure --command-line "sh -c 'echo Feilet; exit 1'" -o none</code></pre>
+  <p>Vent et minutt, og se tilstanden og hvor mange ganger de har startet på nytt:</p>
+<pre><code>"aci-jobb","aci-feil" | ForEach-Object {
+  az container show -g $RG -n $_ --query "containers[0].instanceView.{tilstand:currentState.state, omstarter:restartCount}" -o json
+}</code></pre>
+
+  <h4>10. Container Apps</h4>
+  <p>
+    <b>Hvorfor:</b> Container Apps står mellom ACI og AKS. ACI passer til enkle, isolerte oppgaver, og AKS gir full
+    kontroll over Kubernetes. Container Apps er serverless med orkestrering: skalering, revisions og ingress er
+    innebygd, uten at du ser Kubernetes. Appene ligger i et environment. Skalering styres av regler for HTTP, TCP eller
+    andre hendelser, og standard er 0 til 10 replicas. Står appen på 0, koster den ingen kjøretid.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>ca-web</code> med <b>Create → Container App</b> og et nytt environment
+    <code>env-uke06</code>. Environmentet tok over to minutter i testen. Velg
+    imaget <code>web:v1</code> fra registryet ditt, ingress fra hvor som helst og målport 80. Sett min 0 og maks 3
+    replicas under <b>Scale</b>, og legg til en HTTP-regel på 10 samtidige forespørsler. Åpne adressen under
+    <b>Overview</b>. Uten trafikk går appen til 0 replicas etter rundt fem minutter, og neste forespørsel vekker den.
+    Se det under <b>Revisions and replicas</b>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az containerapp env create -g $RG -n env-uke06 -l $L -o none
+$CA = az containerapp create -g $RG -n ca-web --environment env-uke06 --image "$ACR.azurecr.io/web:v1" `
+  --registry-server "$ACR.azurecr.io" --registry-username $ACR --registry-password $ACRPASS `
+  --ingress external --target-port 80 --min-replicas 0 --max-replicas 3 `
+  --scale-rule-name http --scale-rule-type http --scale-rule-http-concurrency 10 `
+  --query properties.configuration.ingress.fqdn -o tsv
+(Invoke-WebRequest -UseBasicParsing "https://$CA").Content
+az containerapp revision list -g $RG -n ca-web --query "[].{navn:name, replicas:properties.replicas}" -o table</code></pre>
+  </div></details>
+
+  <h4>11. Revisions og trafikkdeling</h4>
+  <p>
+    <b>Hvorfor:</b> en endring i selve containeren, som image, CPU eller skaleringsregler, lager en ny revision. Endringer
+    i ingress og trafikkregler gjør det ikke. Med <i>Multiple</i> revision mode kan flere revisions kjøre samtidig, og du
+    fordeler trafikken mellom dem. En ny revision får 0 % til du gir den trafikk.
+  </p>
+  <p>
+    <b>Oppgave:</b> bygg versjon 2 med kommandoene under. Sett revision mode til <i>Multiple</i> under
+    <b>Revisions and replicas</b>, og lag en ny revision med <code>web:v2</code> og suffikset <code>v2</code>. Fordel
+    trafikken 80/20 på de to, og last siden på nytt noen ganger.
+  </p>
+<pre><code>'&lt;h1&gt;Versjon 2&lt;/h1&gt;' | Set-Content index.html -Encoding ascii
+az acr build -r $ACR -t web:v2 . --no-logs --query status -o tsv</code></pre>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az containerapp revision set-mode -g $RG -n ca-web --mode multiple -o none
+$REV1 = az containerapp revision list -g $RG -n ca-web --query "[0].name" -o tsv
+az containerapp update -g $RG -n ca-web --image "$ACR.azurecr.io/web:v2" --revision-suffix v2 -o none
+az containerapp ingress traffic set -g $RG -n ca-web --revision-weight "$REV1=80" "ca-web--v2=20" -o none
+1..20 | ForEach-Object { (Invoke-WebRequest -UseBasicParsing "https://$CA").Content.Trim() } | Group-Object | Select-Object Count, Name</code></pre>
+  <p>I testen ga 20 forespørsler 15 på versjon 1 og 5 på versjon 2.</p>
+  </div></details>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td><code>-o was unexpected at this time</code></td><td>En <code>--query</code> med parenteser og uten mellomrom, som <code>length(@)</code>, i Windows PowerShell. Bruk kommandoen slik den står</td></tr>
+        <tr><td><code>DB=</code> er tom på siden</td><td>Connection stringen mangler, eller typen er feil. Koden leser <code>CUSTOMCONNSTR_DB</code>, så typen må være <i>Custom</i></td></tr>
+        <tr><td><code>MILJO</code> viser feil verdi på slotten rett etter swap</td><td>Slotten starter på nytt. Vent et minutt, og last siden igjen</td></tr>
+        <tr><td><code>A TXT record pointing from asuid...</code></td><td>Det er meningen i steg 3. Vi har ikke DNS-postene</td></tr>
+        <tr><td>Backupen står som <code>Failed</code></td><td>Adressen ble kuttet ved <code>&amp;</code> i Windows PowerShell. Bruk linjen merket <code>lokalt</code> i steg 4</td></tr>
+        <tr><td>403 på appen</td><td>Regelen fra steg 5 står fortsatt. Fjern den</td></tr>
+        <tr><td><code>InaccessibleImage</code> mot registryet ditt</td><td>Admin user ble nettopp slått på. Vent et halvt minutt, og prøv igjen</td></tr>
+        <tr><td><code>InaccessibleImage</code> mot <code>aci-wordcount</code> eller <code>aci-tutorial-sidecar</code></td><td>Disse eksemplene fra Microsofts dokumentasjon finnes ikke lenger. Bruk imagene i labben</td></tr>
+        <tr><td><code>InvalidContainerGroupUpdate</code></td><td>Det er meningen i steg 8. CPU og minne kan ikke endres på en container group som finnes</td></tr>
+        <tr><td><code>Please specify --registry-username</code></td><td>ACI må ha påloggingen til registryet. <code>$ACRPASS</code> settes i steg 8</td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-06</code>, og kjør linjene fra <b>Før møtet</b> på nytt. Du får samme navn. <code>$ACRPASS</code> står i steg 8 og <code>$CA</code> i steg 10</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er planen og appen fra steg 1, og <code>aci.bicep</code> er container groupen fra steg 9.
+    Resten står under <b>Vis kommando</b> i hvert steg.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
+    <a class="btn-lenke sekundaer" href="aci.bicep" download>aci.bicep</a>
   </div>
 </section>
 
@@ -117,9 +563,10 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>Alt ligger i <code>rg-uke06</code>, også Log Analytics-workspacen som environmentet laget.</p>
+<pre><code>az group delete --name $RG --yes --no-wait</code></pre>
+  <p>Sjekk etter noen minutter at ingenting står igjen:</p>
+<pre><code>az group list -o table</code></pre>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">
