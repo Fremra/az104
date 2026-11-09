@@ -358,10 +358,7 @@ az acr update -n $ACR --admin-enabled true --query adminUserEnabled -o tsv</code
     <b>Networking</b>. Åpne adressen under <b>Overview</b>, og se loggene under <b>Containers</b>. Prøv så å endre CPU
     med kommandoen under. Det går ikke uten å slette container groupen og lage den på nytt.
   </p>
-<pre><code>$ACRPASS = az acr credential show -n $ACR --query "passwords[0].value" -o tsv
-az container create -g $RG -n aci-web --image "$ACR.azurecr.io/web:v1" --registry-login-server "$ACR.azurecr.io" `
-  --registry-username $ACR --registry-password $ACRPASS --os-type Linux --cpu 2 --memory 1 --ports 80 `
-  --dns-name-label "aci-uke06-$ID" -o none      <span class="kom"># feiler</span></code></pre>
+<pre><code>$ACRPASS = az acr credential show -n $ACR --query "passwords[0].value" -o tsv</code></pre>
   <details><summary>Vis kommando</summary><div>
 <pre><code>az container create -g $RG -n aci-web --image "$ACR.azurecr.io/web:v1" --registry-login-server "$ACR.azurecr.io" `
   --registry-username $ACR --registry-password $ACRPASS --os-type Linux --cpu 1 --memory 1 --ports 80 `
@@ -369,6 +366,9 @@ az container create -g $RG -n aci-web --image "$ACR.azurecr.io/web:v1" --registr
 az container show -g $RG -n aci-web --query ipAddress.fqdn -o tsv
 az container logs -g $RG -n aci-web</code></pre>
   </div></details>
+<pre><code>az container create -g $RG -n aci-web --image "$ACR.azurecr.io/web:v1" --registry-login-server "$ACR.azurecr.io" `
+  --registry-username $ACR --registry-password $ACRPASS --os-type Linux --cpu 2 --memory 1 --ports 80 `
+  --dns-name-label "aci-uke06-$ID" -o none      <span class="kom"># feiler</span></code></pre>
 
   <h4>9. Container group og restart policy</h4>
   <p>
@@ -521,7 +521,7 @@ az containerapp ingress traffic set -g $RG -n ca-web --revision-weight "$REV1=80
         <tr><td><code>A TXT record pointing from asuid...</code></td><td>Det er meningen i steg 3. Vi har ikke DNS-postene</td></tr>
         <tr><td>Backupen står som <code>Failed</code></td><td>Adressen ble kuttet ved <code>&amp;</code> i Windows PowerShell. Bruk linjen merket <code>lokalt</code> i steg 4</td></tr>
         <tr><td>403 på appen</td><td>Regelen fra steg 5 står fortsatt. Fjern den</td></tr>
-        <tr><td><code>InaccessibleImage</code> mot registryet ditt</td><td>Admin user ble nettopp slått på. Vent et halvt minutt, og prøv igjen</td></tr>
+        <tr><td><code>InaccessibleImage</code> mot registryet ditt</td><td>Admin user er av, eller <code>$ACRPASS</code> ble hentet før den ble slått på. Slå den på i steg 7, hent <code>$ACRPASS</code> på nytt, og vent et halvt minutt før du prøver igjen</td></tr>
         <tr><td><code>InaccessibleImage</code> mot <code>aci-wordcount</code> eller <code>aci-tutorial-sidecar</code></td><td>Disse eksemplene fra Microsofts dokumentasjon finnes ikke lenger. Bruk imagene i labben</td></tr>
         <tr><td><code>InvalidContainerGroupUpdate</code></td><td>Det er meningen i steg 8. CPU og minne kan ikke endres på en container group som finnes</td></tr>
         <tr><td><code>Please specify --registry-username</code></td><td>ACI må ha påloggingen til registryet. <code>$ACRPASS</code> settes i steg 8</td></tr>
