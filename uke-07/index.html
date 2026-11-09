@@ -48,7 +48,9 @@
   </div>
 </div>
 
-  <div class="callout warn">VPN Gateway og Application Gateway koster per time, uansett bruk. Nettverkslabbene i uke 7 og 8 rives ned samme dag.</div>
+  <div class="callout info">Learn-stien har ingen modul om service endpoints, private endpoints eller Bastion, og Duffy 17–20 har ingen forelesning om dem eller om user-defined routes. Labben tar alle fire. Duffy viser også VNet-to-VNet gateway (139–140), men den står ikke i studieguiden, og vi bygger den ikke.</div>
+
+  <div class="callout warn">VM-ene koster rundt 0,26 USD i timen til sammen, og DNS-sonene 0,50 USD i måneden hver. Slett alt før vi går.</div>
 
 <!-- ======================================================================
      Forberedelse
@@ -99,10 +101,521 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>Virtuelle nettverk, sikker tilgang og navneoppslag</h2>
+  <p class="section-lead">
+    Learn-øvelsene er skrevet for East US og en VM-størrelse vi ikke har kvote på, så her er en egen lab i samme
+    rekkefølge som studieguiden. Hvert steg er en oppgave du løser i portalen. Står du fast, eller vil du sjekke
+    resultatet, ligger kommandoen under <b>Vis kommando</b>. Tester inne i VM-ene kjører du med run command, som i
+    <a href="../uke-05/#lab">uke 5</a>. Går tiden fra deg, hopp over steg 6 og public zone i steg 10. Fasiten ligger
+    <a href="#fasit">under labben</a>.
+  </p>
+
+  <h3>Før møtet</h3>
+  <p>
+    Samme oppsett som i <a href="../uke-02/#lab">uke 2</a>: portalen i et privat vindu med lab-brukeren, og
+    <code>az</code> lokalt med kursprofilen eller i Cloud Shell. Lag en mappe til labben, og sett variablene. Storage
+    accounten trenger et navn som er unikt i hele Azure, så vi bruker starten av subscription-id-en din.
+    <code>$PASSORD</code> er passordet til VM-ene. Du trenger det til Bastion i steg 7, så ta vare på det.
+  </p>
+<pre><code>mkdir uke-07
+cd uke-07
+$RG = "rg-uke07"
+$L = "swedencentral"
+$ID = (az account show --query id -o tsv).Substring(0,6)
+$ST = "stuke07$ID"
+$PASSORD = "Az-$([guid]::NewGuid())"
+$PASSORD</code></pre>
+  <p>Installer også utvidelsen som Bastion-kommandoen i steg 7 trenger:</p>
+<pre><code>az extension add -n bastion --only-show-errors</code></pre>
+
+  <h3>Del A — Virtuelle nettverk (ca. 20 min)</h3>
+
+  <h4>1. VNet, subnets og VM-er i Bicep</h4>
+  <p>
+    <b>Hvorfor:</b> et VNet er et privat nettverk i Azure, delt i subnets. Ressursene i det når hverandre, og med VPN
+    eller ExpressRoute også nettverket on-prem. Planlegg adresserommet før du lager noe: VNet som skal peeres, kan ikke
+    overlappe, og Azure tar fem adresser i hvert subnet. Nye VNet får nå private subnets, så en VM uten public IP kommer
+    ikke ut på internett. Bicep-fila setter det eksplisitt med <code>defaultOutboundAccess</code>, så du ser innstillingen.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke07</code> i Sweden Central, og deploy fila under. Den lager <code>vnet-app</code>
+    med subnettene <code>web</code> og <code>db</code>, <code>vnet-hub</code> med subnettet <code>nva</code>, og én VM i
+    hvert subnet. VM-ene har ingen public IP og slår seg av kl. 20. Åpne <code>vnet-app</code> og
+    <b>Settings → Subnets</b>, og se hvor mange ledige adresser et /24 har. Åpne <code>db</code>, og se at
+    <b>Enable private subnet</b> er krysset av. Prøv så å legge til subnettet <code>test</code> med
+    <code>10.7.2.0/25</code>.
+  </p>
+<pre><code>@'
+@description('Størrelsen på VM-ene')
+param vmSize string = 'Standard_D2als_v6'
+
+@description('Brukernavnet til administratoren')
+param adminUsername string = 'azureuser'
+
+@secure()
+@description('Passordet til administratoren. Du trenger det til Bastion i steg 7')
+param adminPassword string
+
+@description('VM-ene og subnettene de står i')
+var vmer = [
+  {
+    navn: 'vm-web'
+    vnet: 'vnet-app'
+    subnet: 'web'
+  }
+  {
+    navn: 'vm-db'
+    vnet: 'vnet-app'
+    subnet: 'db'
+  }
+  {
+    navn: 'vm-nva'
+    vnet: 'vnet-hub'
+    subnet: 'nva'
+  }
+]
+
+resource app 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'vnet-app'
+  location: resourceGroup().location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [ '10.7.0.0/16' ]
+    }
+    subnets: [
+      {
+        name: 'web'
+        properties: {
+          addressPrefix: '10.7.1.0/24'
+          defaultOutboundAccess: false
+        }
+      }
+      {
+        name: 'db'
+        properties: {
+          addressPrefix: '10.7.2.0/24'
+          defaultOutboundAccess: false
+        }
+      }
+    ]
+  }
+}
+
+resource hub 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'vnet-hub'
+  location: resourceGroup().location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [ '10.70.0.0/16' ]
+    }
+    subnets: [
+      {
+        name: 'nva'
+        properties: {
+          addressPrefix: '10.70.1.0/24'
+          defaultOutboundAccess: false
+        }
+      }
+    ]
+  }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = [for v in vmer: {
+  name: '${v.navn}-nic'
+  location: resourceGroup().location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          subnet: {
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', v.vnet, v.subnet)
+          }
+        }
+      }
+    ]
+  }
+  dependsOn: [
+    app
+    hub
+  ]
+}]
+
+resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = [for (v, i) in vmer: {
+  name: v.navn
+  location: resourceGroup().location
+  properties: {
+    hardwareProfile: {
+      vmSize: vmSize
+    }
+    osProfile: {
+      computerName: v.navn
+      adminUsername: adminUsername
+      adminPassword: adminPassword
+    }
+    storageProfile: {
+      imageReference: {
+        publisher: 'Canonical'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
+        version: 'latest'
+      }
+      osDisk: {
+        name: '${v.navn}-osdisk'
+        createOption: 'FromImage'
+        deleteOption: 'Delete'
+        managedDisk: {
+          storageAccountType: 'StandardSSD_LRS'
+        }
+      }
+    }
+    networkProfile: {
+      networkInterfaces: [
+        {
+          id: nic[i].id
+          properties: {
+            deleteOption: 'Delete'
+          }
+        }
+      ]
+    }
+  }
+}]
+
+resource autoShutdown 'Microsoft.DevTestLab/schedules@2018-09-15' = [for (v, i) in vmer: {
+  name: 'shutdown-computevm-${v.navn}'
+  location: resourceGroup().location
+  properties: {
+    status: 'Enabled'
+    taskType: 'ComputeVmShutdownTask'
+    dailyRecurrence: {
+      time: '2000'
+    }
+    timeZoneId: 'W. Europe Standard Time'
+    targetResourceId: vm[i].id
+    notificationSettings: {
+      status: 'Disabled'
+    }
+  }
+}]
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>az group create --name $RG --location $L --query properties.provisioningState -o tsv
+az deployment group create -g $RG --name nett --template-file main.bicep --parameters adminPassword=$PASSORD `
+  --query properties.provisioningState -o tsv</code></pre>
+  <p>Deployen tok litt over ett minutt i testen.</p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network vnet subnet list -g $RG --vnet-name vnet-app --query "[].{navn:name, prefiks:addressPrefix, veiUt:defaultOutboundAccess}" -o table
+az vm list -g $RG -d --query "[].{navn:name, ip:privateIps, status:powerState}" -o table
+az network vnet subnet create -g $RG --vnet-name vnet-app -n test --address-prefixes 10.7.2.0/25 -o none      <span class="kom"># feiler</span></code></pre>
+  </div></details>
+
+  <h4>2. Public IP og privat IP</h4>
+  <p>
+    <b>Hvorfor:</b> en VM som skal nås fra internett, trenger en public IP. Standard er eneste SKU etter at Basic ble
+    pensjonert i 2025. Adressen er alltid statisk, og den er stengt inn til en NSG åpner. Den gir også VM-en vei ut, og
+    det er en av de eksplisitte måtene et private subnet krever. Private IP-er er dynamiske som standard. Statisk bruker
+    du når andre skal peke på adressen, som en DNS-server eller en NVA.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag public IP-en <code>pip-web</code> med SKU Standard. Koble den til <code>vm-web-nic</code> under
+    <b>Settings → IP configurations → ipconfig1</b>. Sett den private IP-en på <code>vm-db-nic</code> til statisk
+    <code>10.7.2.10</code> samme sted. Kjør så linja under på <code>vm-web</code> og <code>vm-db</code> med
+    <b>Operations → Run command → RunShellScript</b>, og sammenlign. Hver run command tar rundt et halvt minutt.
+  </p>
+<pre><code>hostname -I; curl -s -m 5 https://ifconfig.me || echo ingen vei ut</code></pre>
+  <p>
+    <code>vm-web</code> skal vise public IP-en sin, og <code>vm-db</code> <code>ingen vei ut</code>. I testen fikk
+    <code>vm-db</code> den nye adressen uten omstart.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network public-ip create -g $RG -n pip-web --sku Standard --allocation-method Static --query publicIp.ipAddress -o tsv
+az network nic ip-config update -g $RG --nic-name vm-web-nic -n ipconfig1 --public-ip-address pip-web --query privateIPAllocationMethod -o tsv
+az network nic ip-config update -g $RG --nic-name vm-db-nic -n ipconfig1 --private-ip-address 10.7.2.10 --query privateIPAllocationMethod -o tsv
+"vm-web","vm-db" | ForEach-Object {
+  az vm run-command invoke -g $RG -n $_ --command-id RunShellScript --scripts "hostname -I; curl -s -m 5 https://ifconfig.me || echo ingen vei ut" `
+    --query "value[0].message" -o tsv
+}</code></pre>
+  </div></details>
+
+  <h4>3. Peering</h4>
+  <p>
+    <b>Hvorfor:</b> peering kobler to VNet over Microsofts stamnett, med private IP-er og uten gateway. Det må lages fra
+    begge sider, og status blir <i>Connected</i> når begge finnes. Peering er ikke transitiv: to spokes som er peeret med
+    samme hub, når ikke hverandre uten en NVA eller gateway i huben. Global peering virker på samme måte mellom regioner.
+    Har huben en VPN gateway, kan spokene bruke den med gateway transit: <i>Allow gateway transit</i> på huben og
+    <i>Use remote gateways</i> på spoken.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <code>vnet-app</code> og <b>Settings → Peerings → Add</b>. Velg <code>vnet-hub</code>, og kall
+    peeringen <code>app-til-hub</code> på denne siden og <code>hub-til-app</code> på den andre. Kryss av for at
+    <code>vnet-app</code> kan ta imot forwarded traffic fra <code>vnet-hub</code>. Det trenger vi i steg 4. Se statusen
+    på begge VNet-ene, og kjør <code>ping -c 2 10.70.1.4</code> på <code>vm-web</code>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network vnet peering create -g $RG -n app-til-hub --vnet-name vnet-app --remote-vnet vnet-hub --allow-vnet-access `
+  --allow-forwarded-traffic --query peeringState -o tsv
+az network vnet peering create -g $RG -n hub-til-app --vnet-name vnet-hub --remote-vnet vnet-app --allow-vnet-access `
+  --query peeringState -o tsv
+az network vnet peering list -g $RG --vnet-name vnet-app --query "[].{navn:name, status:peeringState}" -o table
+az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "ping -c 2 10.70.1.4" --query "value[0].message" -o tsv</code></pre>
+  <p>Den første svarer <code>Initiated</code>, fordi den andre siden mangler. Den andre svarer <code>Connected</code>.</p>
+  </div></details>
+
+  <h4>4. User-defined routes</h4>
+  <p>
+    <b>Hvorfor:</b> Azure ruter av seg selv mellom subnets, til peerede VNet og ut på internett. Det er systemrutene. En
+    route table med egne ruter overstyrer dem, og den mest spesifikke ruten vinner. Neste hopp kan være
+    <i>Virtual appliance</i>, <i>Virtual network gateway</i>, <i>Virtual network</i>, <i>Internet</i> eller <i>None</i>.
+    En virtual appliance (NVA) er typisk en brannmur i en hub. Den må ha IP forwarding både på NIC-en i Azure og i
+    operativsystemet, ellers stopper trafikken der. Effective routes viser hvilke ruter som faktisk gjelder for en NIC,
+    og er det første du sjekker når trafikken går feil vei.
+  </p>
+  <p>
+    <b>Oppgave:</b> slå på IP forwarding på <code>vm-nva-nic</code> under <b>Settings → IP configurations</b>, og i Linux
+    med run command på <code>vm-nva</code>: <code>sysctl -w net.ipv4.ip_forward=1</code>. Lag route tablen
+    <code>rt-web</code> med ruten <code>til-db</code>: <code>10.7.2.0/24</code> til <i>Virtual appliance</i>
+    <code>10.70.1.4</code>. Koble den til subnettet <code>web</code> under <b>Settings → Subnets</b>. Kjør
+    <code>tracepath -n -m 5 10.7.2.10</code> på <code>vm-web</code>. Se til slutt <b>Help → Effective routes</b> på
+    <code>vm-web-nic</code>.
+  </p>
+  <p>
+    <code>tracepath</code> skal vise <code>10.70.1.4</code> før <code>10.7.2.10</code>. Svaret går rett tilbake, fordi
+    <code>db</code> ikke har noen route table.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nic update -g $RG -n vm-nva-nic --ip-forwarding true --query enableIPForwarding -o tsv
+az vm run-command invoke -g $RG -n vm-nva --command-id RunShellScript --scripts "sysctl -w net.ipv4.ip_forward=1" --query "value[0].message" -o tsv
+az network route-table create -g $RG -n rt-web -l $L --query provisioningState -o tsv
+az network route-table route create -g $RG --route-table-name rt-web -n til-db --address-prefix 10.7.2.0/24 `
+  --next-hop-type VirtualAppliance --next-hop-ip-address 10.70.1.4 --query provisioningState -o tsv
+az network vnet subnet update -g $RG --vnet-name vnet-app -n web --route-table rt-web --query routeTable.id -o tsv
+az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "tracepath -n -m 5 10.7.2.10" --query "value[0].message" -o tsv
+az network nic show-effective-route-table -g $RG -n vm-web-nic `
+  --query "value[?nextHopType!='None'].{kilde:source, prefiks:addressPrefix[0], neste:nextHopType, ip:nextHopIpAddress[0]}" -o table</code></pre>
+  <p>Uten filteret får du også nesten hundre ruter med neste hopp <i>None</i>, som Azure legger inn av seg selv.</p>
+  </div></details>
+
+  <h3>Del B — Sikker tilgang (ca. 30 min)</h3>
+
+  <h4>5. NSG og ASG</h4>
+  <p>
+    <b>Hvorfor:</b> en NSG er en liste med regler for trafikk inn og ut. Reglene sjekkes etter prioritet, lavest tall
+    først, og den første som treffer, gjelder. En application security group (ASG) samler NIC-er etter funksjon, som web
+    eller db. Reglene kan bruke ASG-en i stedet for IP-adresser, så en ny VM trenger bare å legges i gruppen. NIC-ene i en
+    ASG må stå i samme VNet. Service tags som <code>VirtualNetwork</code>, <code>Internet</code> og <code>Storage</code>
+    er ferdige adressegrupper som Microsoft holder ved like.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag ASG-ene <code>asg-web</code> og <code>asg-db</code>, og legg <code>vm-web</code> og
+    <code>vm-db</code> i hver sin under <b>Networking → Application security groups</b>. Lag NSG-en <code>nsg-db</code>,
+    og koble den til subnettet <code>db</code>. Legg til to innkommende regler fra <code>asg-web</code> til
+    <code>asg-db</code> på port 22: <code>stopp-ssh-fra-web</code> med <i>Deny</i> og prioritet 150, og
+    <code>tillat-ssh-fra-web</code> med <i>Allow</i> og prioritet 200. Kjør <code>nc -zv -w 3 10.7.2.10 22</code> på
+    <code>vm-web</code>. Endre så prioriteten på deny-regelen til 250, og kjør igjen.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network asg create -g $RG -n asg-web -l $L --query provisioningState -o tsv
+az network asg create -g $RG -n asg-db -l $L --query provisioningState -o tsv
+az network nic ip-config update -g $RG --nic-name vm-web-nic -n ipconfig1 --application-security-groups asg-web -o none
+az network nic ip-config update -g $RG --nic-name vm-db-nic -n ipconfig1 --application-security-groups asg-db -o none
+az network nsg create -g $RG -n nsg-db -l $L --query NewNSG.provisioningState -o tsv
+az network nsg rule create -g $RG --nsg-name nsg-db -n stopp-ssh-fra-web --priority 150 --access Deny --protocol Tcp `
+  --source-asgs asg-web --destination-asgs asg-db --destination-port-ranges 22 --query provisioningState -o tsv
+az network nsg rule create -g $RG --nsg-name nsg-db -n tillat-ssh-fra-web --priority 200 --access Allow --protocol Tcp `
+  --source-asgs asg-web --destination-asgs asg-db --destination-port-ranges 22 --query provisioningState -o tsv
+az network vnet subnet update -g $RG --vnet-name vnet-app -n db --nsg nsg-db --query networkSecurityGroup.id -o tsv
+az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "nc -zv -w 3 10.7.2.10 22" --query "value[0].message" -o tsv
+az network nsg rule update -g $RG --nsg-name nsg-db -n stopp-ssh-fra-web --priority 250 --query priority -o tsv
+az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "nc -zv -w 3 10.7.2.10 22" --query "value[0].message" -o tsv</code></pre>
+  <p>Med deny på 150 får du <code>timed out</code>. Med 250 får du <code>succeeded</code>.</p>
+  </div></details>
+
+  <h4>6. Effective security rules</h4>
+  <p>
+    <b>Hvorfor:</b> en NSG kan stå på subnettet, på NIC-en eller på begge. Trafikk inn sjekkes mot subnettet først og så
+    NIC-en, trafikk ut i motsatt rekkefølge, og den må slippe gjennom begge. Effective security rules viser alt som
+    gjelder for en NIC, også standardreglene. De kan ikke slettes, men du kan overstyre dem med regler som har lavere tall.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <code>vm-db-nic</code> og <b>Help → Effective security rules</b>. Finn regelen som stopper
+    trafikk fra internett. Lag så NSG-en <code>nsg-db-nic</code> med regelen <code>stopp-ssh</code>: <i>Deny</i>,
+    prioritet 100, kilde <code>VirtualNetwork</code> og port 22. Koble den til <code>vm-db-nic</code> under
+    <b>Settings → Network security group</b>, og kjør <code>nc</code> fra steg 5 igjen. Se på effective security rules en
+    gang til, og fjern så NSG-en fra NIC-en.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nic list-effective-nsg -g $RG -n vm-db-nic `
+  --query "value[].effectiveSecurityRules[?direction=='Inbound'].{navn:name, prioritet:priority, tilgang:access}[]" -o table
+az network nsg create -g $RG -n nsg-db-nic -l $L --query NewNSG.provisioningState -o tsv
+az network nsg rule create -g $RG --nsg-name nsg-db-nic -n stopp-ssh --priority 100 --access Deny --protocol Tcp `
+  --source-address-prefixes VirtualNetwork --destination-port-ranges 22 --query provisioningState -o tsv
+az network nic update -g $RG -n vm-db-nic --network-security-group nsg-db-nic --query networkSecurityGroup.id -o tsv
+az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "nc -zv -w 3 10.7.2.10 22" --query "value[0].message" -o tsv
+az network nic list-effective-nsg -g $RG -n vm-db-nic --query "value[].networkSecurityGroup.id" -o tsv
+az network nic update -g $RG -n vm-db-nic --remove networkSecurityGroup -o none</code></pre>
+  </div></details>
+
+  <h4>7. Bastion</h4>
+  <p>
+    <b>Hvorfor:</b> Bastion gir RDP og SSH i nettleseren over port 443, til VM-er som ikke har public IP. Developer er
+    gratis, men den er delt, tar én tilkobling om gangen og når ikke VM-er i peerede VNet. Basic og høyere er dedikerte,
+    krever et subnet som heter <code>AzureBastionSubnet</code> og er minst /26, og en Standard public IP. Basic koster
+    0,19 USD i timen i Sweden Central. Native client, altså SSH fra din egen terminal, krever Standard eller Premium.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <code>vm-db</code> og <b>Connect → Bastion</b>, og velg å deploye Bastion Developer. Logg inn
+    med <code>azureuser</code> og passordet i <code>$PASSORD</code>. Kjør <code>hostname -I</code> og
+    <code>curl -m 5 https://ifconfig.me</code> i økten.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network bastion create -g $RG -n bas-uke07 -l $L --sku Developer --vnet-name vnet-app --query provisioningState -o tsv</code></pre>
+  <p>Den var klar på sekunder i testen. Selve økten åpner du i portalen.</p>
+  </div></details>
+
+  <h4>8. Service endpoint</h4>
+  <p>
+    <b>Hvorfor:</b> en service endpoint gir subnettet en egen vei til en Azure-tjeneste over stamnettet, og tjenesten
+    ser hvilket subnet trafikken kommer fra. Da kan brannmuren på tjenesten slippe inn subnettet med en VNet-regel.
+    Tjenesten har fortsatt public IP, og endepunktet er gratis. IP-regler virker ikke for trafikk fra samme region, så
+    der trenger du en VNet-regel. Brannmuren kjenner du fra <a href="../uke-04/#lab">uke 4, steg 8</a>.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag en storage account med navnet i <code>$ST</code>. Under
+    <b>Security + networking → Networking</b> slår du på tilgang bare fra valgte nettverk, og legger til
+    <code>vnet-app</code> med subnettet <code>db</code>. Portalen slår på service endpointen for deg. Kjør linja under
+    på <code>vm-db</code> og <code>vm-web</code>, med navnet ditt i stedet for <code>stuke07xxxxxx</code>. Prøv også
+    lokalt med linja etter.
+  </p>
+<pre><code>curl -s -m 10 https://stuke07xxxxxx.blob.core.windows.net/?comp=list | grep -o -E 'AuthorizationFailure|PublicAccessNotPermitted' || echo ingen kontakt</code></pre>
+<pre><code>try { Invoke-WebRequest -UseBasicParsing "https://$ST.blob.core.windows.net/?comp=list" } catch { $_.ErrorDetails.Message }</code></pre>
+  <p>
+    <code>AuthorizationFailure</code> betyr at brannmuren stoppet deg. <code>PublicAccessNotPermitted</code> betyr at du
+    kom gjennom, men at anonym tilgang er av. Det holder, fordi vi tester nettverket. <code>vm-db</code> skal komme
+    gjennom, mens <code>vm-web</code> og du lokalt skal bli stoppet.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az storage account create -g $RG -n $ST -l $L --sku Standard_LRS --allow-blob-public-access false --query provisioningState -o tsv
+az network vnet subnet update -g $RG --vnet-name vnet-app -n db --service-endpoints Microsoft.Storage --query "serviceEndpoints[].service" -o tsv
+az storage account network-rule add -g $RG --account-name $ST --vnet-name vnet-app --subnet db --query "virtualNetworkRules[].state" -o tsv
+az storage account update -g $RG -n $ST --default-action Deny --query networkRuleSet.defaultAction -o tsv
+$SJEKK = "curl -s -m 10 https://$ST.blob.core.windows.net/?comp=list | grep -o -E 'AuthorizationFailure|PublicAccessNotPermitted' || echo ingen kontakt"
+"vm-db","vm-web" | ForEach-Object {
+  az vm run-command invoke -g $RG -n $_ --command-id RunShellScript --scripts $SJEKK --query "value[0].message" -o tsv
+}
+az network nic show-effective-route-table -g $RG -n vm-db-nic `
+  --query "value[?nextHopType=='VirtualNetworkServiceEndpoint'].{neste:nextHopType, prefikser:length(addressPrefix)}" -o table</code></pre>
+  <p>Den siste linja viser at service endpointen er ruter på subnettet, til adressene Storage har i regionen.</p>
+  </div></details>
+
+  <h4>9. Private endpoint</h4>
+  <p>
+    <b>Hvorfor:</b> en private endpoint er en NIC i ditt subnet med en privat IP for én bestemt ressurs, her blob-delen
+    av storage accounten. Den nås fra VNet-et, fra peerede VNet og fra on-prem, og tjenesten kan stenges helt for
+    internett. Navnet må da slå opp til den private IP-en, og det gjør en private DNS zone,
+    <code>privatelink.blob.core.windows.net</code>. Service endpoint mot private endpoint er et vanlig eksamensspørsmål.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne storage accounten og <b>Security + networking → Networking → Private endpoints</b>, og lag
+    <code>pe-blob</code>: sub-resource <code>blob</code>, <code>vnet-app</code> og subnettet <code>web</code>, med
+    integrasjon mot private DNS zone. Kjør <code>nslookup stuke07xxxxxx.blob.core.windows.net</code> på
+    <code>vm-web</code> og lokalt, og sammenlign. Slå så av public network access, og kjør sjekkene fra steg 8 på nytt.
+  </p>
+  <p>
+    Lokalt går navnet via <code>privatelink</code> til en public IP, og på <code>vm-web</code> til en adresse i
+    <code>10.7.1.0/24</code>. Etterpå kommer begge VM-ene gjennom, fordi også <code>vm-db</code> slår opp den private
+    IP-en. Lokalt blir du stoppet.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>$SAID = az storage account show -g $RG -n $ST --query id -o tsv
+az network private-endpoint create -g $RG -n pe-blob -l $L --vnet-name vnet-app --subnet web --private-connection-resource-id $SAID `
+  --group-id blob --connection-name pe-blob --query "customDnsConfigs[0].ipAddresses[0]" -o tsv
+az network private-dns zone create -g $RG -n privatelink.blob.core.windows.net --query provisioningState -o tsv
+az network private-dns link vnet create -g $RG -z privatelink.blob.core.windows.net -n app --virtual-network vnet-app `
+  --registration-enabled false --query provisioningState -o tsv
+az network private-endpoint dns-zone-group create -g $RG --endpoint-name pe-blob -n blob `
+  --private-dns-zone privatelink.blob.core.windows.net --zone-name blob --query provisioningState -o tsv
+az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "nslookup $ST.blob.core.windows.net" --query "value[0].message" -o tsv
+nslookup "$ST.blob.core.windows.net"
+az storage account update -g $RG -n $ST --public-network-access Disabled --query publicNetworkAccess -o tsv</code></pre>
+  <p>Portalen lager endepunktet, sonen, linken og DNS zone group i én dialog. Det tok rundt to minutter i testen.</p>
+  </div></details>
+
+  <h3>Del C — Navneoppslag (ca. 10 min)</h3>
+
+  <h4>10. Private og public DNS zones</h4>
+  <p>
+    <b>Hvorfor:</b> Azure DNS har to typer soner. En private zone gir navn inne i VNet-ene den er linket til, og med
+    autoregistrering legger VM-ene seg inn selv. Et VNet kan ha autoregistrering mot bare én sone, men en sone kan linkes
+    til mange VNet. En public zone er domenet ditt på internett. Azure gir sonen fire navnetjenere, og domenet virker
+    først når registraren peker på dem med NS-poster. En alias-post peker på en Azure-ressurs, som en public IP, og
+    følger med hvis adressen endres. Den kan stå på roten av domenet, der en CNAME ikke er lov.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag private DNS-sonen <code>uke07.intern</code>. Link den til <code>vnet-app</code> med
+    autoregistrering og til <code>vnet-hub</code> uten. Se postene som kom av seg selv, og kjør
+    <code>nslookup vm-db.uke07.intern; nslookup vm-nva.uke07.intern</code> på <code>vm-nva</code>. Lag så en DNS zone
+    som heter <code>uke07-</code> og verdien av <code>$ID</code>, med <code>.no</code> til slutt. Legg til A-posten
+    <code>www</code> med <code>203.0.113.10</code>, og en alias-post på <code>@</code> som peker på <code>pip-web</code>.
+    Slå opp begge mot en av navnetjenerne til sonen.
+  </p>
+  <p>
+    <code>vm-nva</code> står ikke i sonen, fordi <code>vnet-hub</code> ikke har autoregistrering. Linkene tok rundt ett
+    minutt hver i testen. Domenet er ikke delegert, så uten navnetjeneren finner ikke <code>nslookup</code> det.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network private-dns zone create -g $RG -n uke07.intern --query provisioningState -o tsv
+az network private-dns link vnet create -g $RG -z uke07.intern -n app --virtual-network vnet-app --registration-enabled true `
+  --query provisioningState -o tsv
+az network private-dns link vnet create -g $RG -z uke07.intern -n hub --virtual-network vnet-hub --registration-enabled false `
+  --query provisioningState -o tsv
+az network private-dns record-set a list -g $RG -z uke07.intern --query "[].{navn:name, ip:aRecords[0].ipv4Address, auto:isAutoRegistered}" -o table
+az vm run-command invoke -g $RG -n vm-nva --command-id RunShellScript --scripts "nslookup vm-db.uke07.intern; nslookup vm-nva.uke07.intern" `
+  --query "value[0].message" -o tsv
+$ZONE = "uke07-$ID.no"
+az network dns zone create -g $RG -n $ZONE --query nameServers -o tsv
+az network dns record-set a add-record -g $RG -z $ZONE -n www -a 203.0.113.10 --query fqdn -o tsv
+$PIP = az network public-ip show -g $RG -n pip-web --query id -o tsv
+az network dns record-set a create -g $RG -z $ZONE -n "@" --target-resource $PIP --query fqdn -o tsv
+az network dns record-set list -g $RG -z $ZONE --query "[].{navn:name, post:type}" -o table
+$NS = az network dns zone show -g $RG -n $ZONE --query "nameServers[0]" -o tsv
+nslookup "www.$ZONE" $NS
+nslookup $ZONE $NS</code></pre>
+  <p>Roten av sonen har tre poster: NS og SOA, som Azure lager, og aliaset ditt.</p>
+  </div></details>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td><code>NetcfgSubnetRangesOverlap</code></td><td>Det er meningen i steg 1. Subnettet overlapper med <code>db</code></td></tr>
+        <tr><td><code>ingen vei ut</code> fra <code>vm-db</code></td><td>Det er meningen i steg 2. Subnettet er private, og <code>vm-db</code> har ingen public IP</td></tr>
+        <tr><td>Peeringen står som <code>Initiated</code></td><td>Bare den ene siden er laget. Lag peeringen fra det andre VNet-et også</td></tr>
+        <tr><td><code>tracepath</code> viser ikke <code>10.70.1.4</code></td><td>Route tablen er ikke koblet til subnettet <code>web</code></td></tr>
+        <tr><td><code>tracepath</code> stopper ved <code>10.70.1.4</code> eller gir <code>no reply</code></td><td>IP forwarding mangler på NIC-en eller i Linux, eller peeringen <code>app-til-hub</code> tar ikke imot forwarded traffic</td></tr>
+        <tr><td><code>succeeded</code> selv om deny-regelen har prioritet 150</td><td>NSG-en er ikke koblet til subnettet <code>db</code>, eller VM-ene mangler ASG-ene</td></tr>
+        <tr><td><code>The command requires the extension bastion</code></td><td>Utvidelsen fra <b>Før møtet</b> mangler. Svar <code>Y</code>, eller kjør <code>az extension add -n bastion</code></td></tr>
+        <tr><td>Bastion avviser passordet</td><td><code>$PASSORD</code> er nytt hver gang du kjører linjene fra <b>Før møtet</b>. Sett det på VM-en igjen med <code>az vm user update -g $RG -n vm-db -u azureuser -p $PASSORD</code></td></tr>
+        <tr><td><code>AuthorizationFailure</code> fra <code>vm-db</code> i steg 8</td><td>VNet-regelen eller service endpointen mangler på subnettet <code>db</code></td></tr>
+        <tr><td><code>vm-web</code> slår opp en public IP i steg 9</td><td>DNS-integrasjonen mangler. Sjekk at sonen er linket til <code>vnet-app</code>, og at endepunktet har en DNS zone group</td></tr>
+        <tr><td><code>Non-existent domain</code> for public zone</td><td>Du slo ikke opp mot navnetjeneren til sonen. Domenet er ikke delegert</td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-07</code>, og kjør linjene fra <b>Før møtet</b> på nytt. Du får samme navn, men nytt passord. <code>$SAID</code> står i steg 9 og <code>$ZONE</code> i steg 10</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er VNet-ene og VM-ene fra steg 1. Resten står under <b>Vis kommando</b> i hvert steg.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
   </div>
 </section>
 
@@ -122,9 +635,10 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>Alt ligger i <code>rg-uke07</code>, også Bastion og DNS-sonene.</p>
+<pre><code>az group delete --name $RG --yes --no-wait</code></pre>
+  <p>Du trenger ikke å vente. Slettingen tok 20 minutter i testen. Sjekk senere at gruppen er borte:</p>
+<pre><code>az group list -o table</code></pre>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">
