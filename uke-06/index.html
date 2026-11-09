@@ -332,15 +332,15 @@ az appservice plan show -g $RG -n plan-uke06 --query sku.capacity -o tsv      <s
     <b>Access keys</b>. Den er av som standard, og vi trenger den for å hente imaget i steg 8. Den gir full tilgang, så
     i ekte miljøer bruker du heller en managed identity med rollen <code>AcrPull</code>.
   </p>
-<pre><code>'&lt;h1&gt;Versjon 1&lt;/h1&gt;' | Set-Content index.html -Encoding ascii
+<pre><code>az acr create -g $RG -n $ACR --sku Basic --query loginServer -o tsv
+'&lt;h1&gt;Versjon 1&lt;/h1&gt;' | Set-Content index.html -Encoding ascii
 @'
 FROM mcr.microsoft.com/azurelinux/base/nginx:1.25
 COPY index.html /usr/share/nginx/html/index.html
 '@ | Set-Content Dockerfile -Encoding ascii
 az acr build -r $ACR -t web:v1 . --no-logs --query status -o tsv</code></pre>
   <details><summary>Vis kommando</summary><div>
-<pre><code>az acr create -g $RG -n $ACR --sku Basic --query loginServer -o tsv
-az acr import -n $ACR --source mcr.microsoft.com/azuredocs/aci-helloworld:latest --image aci-helloworld:v1
+<pre><code>az acr import -n $ACR --source mcr.microsoft.com/azuredocs/aci-helloworld:latest --image aci-helloworld:v1
 az acr repository list -n $ACR -o tsv
 az acr update -n $ACR --admin-enabled true --query adminUserEnabled -o tsv</code></pre>
   </div></details>
@@ -565,7 +565,7 @@ az containerapp ingress traffic set -g $RG -n ca-web --revision-weight "$REV1=80
   <h2>Opprydding</h2>
   <p>Alt ligger i <code>rg-uke06</code>, også Log Analytics-workspacen som environmentet laget.</p>
 <pre><code>az group delete --name $RG --yes --no-wait</code></pre>
-  <p>Sjekk etter noen minutter at ingenting står igjen:</p>
+  <p>Du trenger ikke å vente. Slettingen tok 26 minutter i testen, men det dyre var borte etter fem. Sjekk senere at gruppen er borte:</p>
 <pre><code>az group list -o table</code></pre>
 </section>
 
