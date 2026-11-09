@@ -6,20 +6,18 @@ Hjelpeside for Fremras AZ-104-kollokvium, ti mandager fra 5. oktober til 7. dese
 
 ## Tilgang
 
-Repoet er privat, men **selve siden er offentlig tilgjengelig** for alle som har URL-en.
-Tilgangsstyrt Pages krever GitHub Enterprise Cloud, og det har vi ikke på Team-planen.
-Alle sidene er merket `noindex, nofollow`, så de ikke havner i søkemotorer. Del URL-en
-med deltakerne, ikke bredere.
+Repoet og siden er offentlige. Sidene er merket `noindex, nofollow`, så de ikke havner i
+søkemotorer.
 
-**Alt i repoet blir publisert**, også denne README-en. Bare `.github/` og filer som
-begynner med punktum holdes utenfor. Derfor skal dette aldri inn i repoet:
+**Alt som pushes, er offentlig**, også historikken. Derfor skal dette aldri inn i repoet:
 
 - tenantnavn, tenant-id eller subscription-id-er
 - brukernavn, passord eller annen innloggingsinfo. Siden sier «får du av Anders»
 - supportsaker, kundenavn eller interne notater
 
 Workflowen stopper publiseringen hvis den finner tenantnavnet, tenantdomenet, en GUID eller et
-16-sifret tall. Kjør samme sjekk lokalt i PowerShell før du pusher:
+16-sifret tall, men da ligger pushen allerede i repoet. Kjør derfor samme sjekk lokalt i
+PowerShell før du pusher:
 
 ```powershell
 $m = (Select-String .github\workflows\pages.yml -Pattern "^\s*m='(.*)'$").Matches[0].Groups[1].Value
@@ -39,8 +37,7 @@ Ingen treff betyr at du kan pushe.
 
 Det er ingen byggesteg. HTML-filene er kilden og redigeres direkte.
 
-Utseendet følger designtokenene fra `FremraOperations/FremraOperations.Web/wwwroot/css/style.css`,
-via `Fremra/rotterdam2026` (merkefarge `#eb4f34`, Inter + Ovo).
+Utseendet følger Fremras designtokens: merkefarge `#eb4f34`, Inter og Ovo.
 
 **Neste møte** på forsiden fylles av `assets/side.js` fra ukeplan-tabellen. Kortet viser
 første uke med dato i dag eller senere. Legg til `?dato=2026-10-06` i URL-en for å teste en
@@ -75,5 +72,4 @@ Bytt ut callouten under `<section id="kunnskapssjekk">` med ett `<details>` per 
 
 ## Kilder
 
-Kollokvieplanen, Duffy-pensumet og manusene til møtene ligger privat hos Anders, ikke i repoet.
 Learn-modulene og eksamensinfoen er hentet fra Microsoft Learn 29.09.2026 og kontrollert 01.10.2026.
