@@ -106,7 +106,8 @@
     Learn-øvelsene er skrevet for East US og en VM-størrelse vi ikke har kvote på, så her er en egen lab i samme
     rekkefølge som studieguiden. Hvert steg er en oppgave du løser i portalen. Står du fast, eller vil du sjekke
     resultatet, ligger kommandoen under <b>Vis kommando</b>. Tester inne i VM-ene kjører du med run command, som i
-    <a href="../uke-05/#lab">uke 5</a>. Går tiden fra deg, hopp over steg 6 og public zone i steg 10. Fasiten ligger
+    <a href="../uke-05/#lab">uke 5</a>. Står det lokalt, er det terminalen der du kjører <code>az</code>, på din egen
+    maskin eller i Cloud Shell. Går tiden fra deg, hopp over steg 6 og public zone i steg 10. Fasiten ligger
     <a href="#fasit">under labben</a>.
   </p>
 
@@ -317,10 +318,12 @@ az network vnet subnet create -g $RG --vnet-name vnet-app -n test --address-pref
     du når andre skal peke på adressen, som en DNS-server eller en NVA.
   </p>
   <p>
-    <b>Oppgave:</b> lag public IP-en <code>pip-web</code> med SKU Standard. Koble den til <code>vm-web-nic</code> under
-    <b>Settings → IP configurations → ipconfig1</b>. Sett den private IP-en på <code>vm-db-nic</code> til statisk
-    <code>10.7.2.10</code> samme sted. Kjør så linja under på <code>vm-web</code> og <code>vm-db</code> med
-    <b>Operations → Run command → RunShellScript</b>, og sammenlign. Hver run command tar rundt et halvt minutt.
+    <b>Oppgave:</b> lag public IP-en <code>pip-web</code> med SKU Standard. Husk å velge region Sweden Central. Gjør så
+    én endring på hver av to NIC-er, under <b>Settings → IP configurations → ipconfig1</b>. På <code>vm-web-nic</code>
+    krysser du av for <i>Associate public IP address</i> og velger <code>pip-web</code>. Den er statisk av seg selv. På
+    <code>vm-db-nic</code> setter du den private IP-en til <i>Static</i> og <code>10.7.2.10</code>. Kjør så linja under på
+    <code>vm-web</code> og <code>vm-db</code> med <b>Operations → Run command → RunShellScript</b>, og sammenlign. Hver run
+    command tar rundt et halvt minutt.
   </p>
 <pre><code>hostname -I; curl -s -m 5 https://ifconfig.me || echo ingen vei ut</code></pre>
   <p>
@@ -346,10 +349,12 @@ az network nic ip-config update -g $RG --nic-name vm-db-nic -n ipconfig1 --priva
     <i>Use remote gateways</i> på spoken.
   </p>
   <p>
-    <b>Oppgave:</b> åpne <code>vnet-app</code> og <b>Settings → Peerings → Add</b>. Velg <code>vnet-hub</code>, og kall
-    peeringen <code>app-til-hub</code> på denne siden og <code>hub-til-app</code> på den andre. Kryss av for at
-    <code>vnet-app</code> kan ta imot forwarded traffic fra <code>vnet-hub</code>. Det trenger vi i steg 4. Se statusen
-    på begge VNet-ene, og kjør <code>ping -c 2 10.70.1.4</code> på <code>vm-web</code>.
+    <b>Oppgave:</b> åpne <code>vnet-app</code> og <b>Settings → Peerings → Add</b>. Dialogen lager begge sidene, og det er
+    lett å bytte dem om. Den øverste delen, <b>Remote virtual network</b>, er <code>vnet-hub</code>: kall peeringen
+    <code>hub-til-app</code>, og velg <code>vnet-hub</code>. Den nederste, <b>Local virtual network</b>, er
+    <code>vnet-app</code>: kall den <code>app-til-hub</code>, og kryss av for
+    <i>Allow 'vnet-app' to receive forwarded traffic from 'vnet-hub'</i>. Det trenger vi i steg 4. Se statusen på begge
+    VNet-ene, og kjør <code>ping -c 2 10.70.1.4</code> på <code>vm-web</code>.
   </p>
   <details><summary>Vis kommando</summary><div>
 <pre><code>az network vnet peering create -g $RG -n app-til-hub --vnet-name vnet-app --remote-vnet vnet-hub --allow-vnet-access `
@@ -371,16 +376,36 @@ az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts 
     og er det første du sjekker når trafikken går feil vei.
   </p>
   <p>
-    <b>Oppgave:</b> slå på IP forwarding på <code>vm-nva-nic</code> under <b>Settings → IP configurations</b>, og i Linux
-    med run command på <code>vm-nva</code>: <code>sysctl -w net.ipv4.ip_forward=1</code>. Lag route tablen
-    <code>rt-web</code> med ruten <code>til-db</code>: <code>10.7.2.0/24</code> til <i>Virtual appliance</i>
-    <code>10.70.1.4</code>. Koble den til subnettet <code>web</code> under <b>Settings → Subnets</b>. Kjør
-    <code>tracepath -n -m 5 10.7.2.10</code> på <code>vm-web</code>. Se til slutt <b>Help → Effective routes</b> på
-    <code>vm-web-nic</code>.
+    <b>Oppgave:</b> i labben spiller <code>vm-nva</code> brannmur i huben. Trafikk fra <code>web</code> til
+    <code>db</code> går vanligvis rett fram, fordi begge står i <code>vnet-app</code>. Nå skal du tvinge den innom huben:
+    <code>vm-web</code> → <code>vm-nva</code> (<code>10.70.1.4</code>) → <code>vm-db</code> (<code>10.7.2.10</code>).
+    Duffy har ingen forelesning om dette, så ta det i fire deler.
   </p>
   <p>
-    <code>tracepath</code> skal vise <code>10.70.1.4</code> før <code>10.7.2.10</code>. Svaret går rett tilbake, fordi
-    <code>db</code> ikke har noen route table.
+    <b>Gjør <code>vm-nva</code> til en ruter.</b> Åpne <code>vm-nva-nic</code> og <b>Settings → IP configurations</b>,
+    kryss av for <i>Enable IP forwarding</i>, og lagre. Da leverer Azure pakker til NIC-en selv om de skal til en annen
+    adresse. Linux må også sende dem videre, så kjør <code>sysctl -w net.ipv4.ip_forward=1</code> med run command på
+    <code>vm-nva</code>.
+  </p>
+  <p>
+    <b>Lag route tablen.</b> Søk opp <i>Route tables</i> i portalen, og lag <code>rt-web</code> i <code>rg-uke07</code>
+    og Sweden Central. Åpne den, og legg til ruten <code>til-db</code> under <b>Settings → Routes → Add</b>:
+    <i>Destination type</i> <i>IP Addresses</i>, adressen <code>10.7.2.0/24</code>, <i>Next hop type</i>
+    <i>Virtual appliance</i> og <i>Next hop address</i> <code>10.70.1.4</code>.
+  </p>
+  <p>
+    <b>Koble den til subnettet.</b> En route table gjør ingenting før den står på et subnet. Under
+    <b>Settings → Subnets → Associate</b> velger du <code>vnet-app</code> og <code>web</code>. Ruten gjelder da for alt
+    som går ut av <code>web</code>.
+  </p>
+  <p>
+    <b>Test.</b> Kjør <code>tracepath -n -m 5 10.7.2.10</code> på <code>vm-web</code>. Den skal vise
+    <code>10.70.1.4</code> før <code>10.7.2.10</code>. Svaret går rett tilbake, fordi <code>db</code> ikke har noen
+    route table. Åpne til slutt <b>Help → Effective routes</b> på <code>vm-web-nic</code>. Lista har over hundre ruter
+    med neste hopp <i>None</i>, som Azure legger inn av seg selv, og trafikk dit blir droppet. Ruten din står med kilde
+    <i>User</i>, men den er lett å overse. Søk etter <code>User</code> med Ctrl+F, eller hent hele lista med
+    <i>Download</i>. Systemruten for <code>10.7.0.0/16</code> står der fortsatt, men <code>10.7.2.0/24</code> er mer
+    spesifikk og vinner.
   </p>
   <details><summary>Vis kommando</summary><div>
 <pre><code>az network nic update -g $RG -n vm-nva-nic --ip-forwarding true --query enableIPForwarding -o tsv
@@ -408,8 +433,8 @@ az network nic show-effective-route-table -g $RG -n vm-web-nic `
   <p>
     <b>Oppgave:</b> lag ASG-ene <code>asg-web</code> og <code>asg-db</code>, og legg <code>vm-web</code> og
     <code>vm-db</code> i hver sin under <b>Networking → Application security groups</b>. Lag NSG-en <code>nsg-db</code>,
-    og koble den til subnettet <code>db</code>. Legg til to innkommende regler fra <code>asg-web</code> til
-    <code>asg-db</code> på port 22: <code>stopp-ssh-fra-web</code> med <i>Deny</i> og prioritet 150, og
+    og koble den til subnettet <code>db</code> under <b>Settings → Subnets → Associate</b>. Legg til to regler under
+    <b>Settings → Inbound security rules</b> fra <code>asg-web</code> til <code>asg-db</code> på port 22: <code>stopp-ssh-fra-web</code> med <i>Deny</i> og prioritet 150, og
     <code>tillat-ssh-fra-web</code> med <i>Allow</i> og prioritet 200. Kjør <code>nc -zv -w 3 10.7.2.10 22</code> på
     <code>vm-web</code>. Endre så prioriteten på deny-regelen til 250, og kjør igjen.
   </p>
@@ -438,9 +463,12 @@ az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts 
   </p>
   <p>
     <b>Oppgave:</b> åpne <code>vm-db-nic</code> og <b>Help → Effective security rules</b>. Finn regelen som stopper
-    trafikk fra internett. Lag så NSG-en <code>nsg-db-nic</code> med regelen <code>stopp-ssh</code>: <i>Deny</i>,
-    prioritet 100, kilde <code>VirtualNetwork</code> og port 22. Koble den til <code>vm-db-nic</code> under
-    <b>Settings → Network security group</b>, og kjør <code>nc</code> fra steg 5 igjen. Se på effective security rules en
+    trafikk inn fra internett. Den står blant inbound-reglene, og den eneste regelen med <i>Internet</i> i navnet gjelder
+    trafikk ut. Lag så NSG-en <code>nsg-db-nic</code>, og legg til regelen <code>stopp-ssh</code> under
+    <b>Settings → Inbound security rules</b>: <i>Deny</i>, prioritet 100, <i>Source</i> <i>Service Tag</i> med
+    <code>VirtualNetwork</code>, og port 22. Koble <code>nsg-db-nic</code> til <code>vm-db-nic</code> under
+    <b>Settings → Network security group</b>, og kjør <code>nc</code> fra steg 5 igjen. Velg ikke <code>nsg-db</code>,
+    den står allerede på subnettet. Se på effective security rules en
     gang til, og fjern så NSG-en fra NIC-en.
   </p>
   <details><summary>Vis kommando</summary><div>
@@ -453,6 +481,11 @@ az network nic update -g $RG -n vm-db-nic --network-security-group nsg-db-nic --
 az vm run-command invoke -g $RG -n vm-web --command-id RunShellScript --scripts "nc -zv -w 3 10.7.2.10 22" --query "value[0].message" -o tsv
 az network nic list-effective-nsg -g $RG -n vm-db-nic --query "value[].networkSecurityGroup.id" -o tsv
 az network nic update -g $RG -n vm-db-nic --remove networkSecurityGroup -o none</code></pre>
+  <p>
+    Regelen er <code>DenyAllInBound</code> på 65500. Reglene over den slipper bare inn <code>VirtualNetwork</code> og
+    <code>AzureLoadBalancer</code>, så all annen trafikk inn stopper der. Med <code>nsg-db-nic</code> på NIC-en gir
+    <code>nc</code> <code>timed out</code>, selv om <code>nsg-db</code> på subnettet slipper SSH gjennom.
+  </p>
   </div></details>
 
   <h4>7. Bastion</h4>
@@ -463,12 +496,20 @@ az network nic update -g $RG -n vm-db-nic --remove networkSecurityGroup -o none<
     0,19 USD i timen i Sweden Central. Native client, altså SSH fra din egen terminal, krever Standard eller Premium.
   </p>
   <p>
-    <b>Oppgave:</b> åpne <code>vm-db</code> og <b>Connect → Bastion</b>, og velg å deploye Bastion Developer. Logg inn
-    med <code>azureuser</code> og passordet i <code>$PASSORD</code>. Kjør <code>hostname -I</code> og
-    <code>curl -m 5 https://ifconfig.me</code> i økten.
+    <b>Oppgave:</b> <code>vm-db</code> er nå stengt helt inne. Den har ingen public IP og ingen vei ut. Hittil har du
+    nådd den med run command, men det går via VM-agenten og ikke over nettverket. Nå skal du få et vanlig SSH-skall på
+    den uten å åpne noe mot internett. Åpne <code>vm-db</code> og <b>Connect → Bastion</b>, og velg
+    <i>Deploy Bastion Developer</i>. Logg inn med <code>azureuser</code> og passordet i <code>$PASSORD</code>. Økten åpner
+    seg i et nytt vindu. Kjør <code>hostname -I</code> og <code>curl -m 5 https://ifconfig.me</code> der. Skriv dem
+    selv, for innliming i Bastion-vinduet virker sjelden.
+  </p>
+  <p>
+    Du får <code>10.7.2.10</code>, og <code>curl</code> gir opp etter fem sekunder. Bastion gir deg vei inn, men VM-en
+    har fortsatt ingen vei ut. Å nå en VM uten public IP og uten å åpne RDP eller SSH mot internett er et vanlig
+    eksamensspørsmål, og svaret er Bastion.
   </p>
   <details><summary>Vis kommando</summary><div>
-<pre><code>az network bastion create -g $RG -n bas-uke07 -l $L --sku Developer --vnet-name vnet-app --query provisioningState -o tsv</code></pre>
+<pre><code>az network bastion create -g $RG -n vnet-app-bastion -l $L --sku Developer --vnet-name vnet-app --query provisioningState -o tsv</code></pre>
   <p>Den var klar på sekunder i testen. Selve økten åpner du i portalen.</p>
   </div></details>
 
@@ -480,11 +521,16 @@ az network nic update -g $RG -n vm-db-nic --remove networkSecurityGroup -o none<
     der trenger du en VNet-regel. Brannmuren kjenner du fra <a href="../uke-04/#lab">uke 4, steg 8</a>.
   </p>
   <p>
-    <b>Oppgave:</b> lag en storage account med navnet i <code>$ST</code>. Under
-    <b>Security + networking → Networking</b> slår du på tilgang bare fra valgte nettverk, og legger til
-    <code>vnet-app</code> med subnettet <code>db</code>. Portalen slår på service endpointen for deg. Kjør linja under
-    på <code>vm-db</code> og <code>vm-web</code>, med navnet ditt i stedet for <code>stuke07xxxxxx</code>. Prøv også
-    lokalt med linja etter.
+    <b>Oppgave:</b> lag en storage account med navnet i <code>$ST</code>, i <code>rg-uke07</code> og Sweden Central. Åpne
+    den og <b>Security + networking → Networking</b>, og trykk <b>Manage</b> under <i>Public network access</i> på fanen
+    <i>Public access</i>. La <i>Public network access</i> stå på <i>Enable</i>, og bytt
+    <i>Public network access scope</i> til <i>Enabled from selected networks</i>. Da dukker <i>Virtual Networks</i> opp
+    lenger ned i panelet. Trykk <b>Add a virtual network</b>, og velg <i>Add existing virtual network</i>. Under
+    <i>Virtual networks</i> krysser du bare av for <code>vnet-app</code>, ikke <i>Select all</i>, og under
+    <i>Subnets</i> bare for <code>db</code>. Trykk <b>Add</b>. La <i>IPv4 Addresses</i> stå tom, for med din
+    egen IP slipper du gjennom lokalt. Trykk til slutt <b>Save</b>. Portalen slår på service endpointen for deg, og det
+    tar litt tid. Kjør linja under med run command på <code>vm-db</code> og <code>vm-web</code>, med navnet ditt i
+    stedet for <code>stuke07xxxxxx</code>. Prøv også lokalt med linja etter.
   </p>
 <pre><code>curl -s -m 10 https://stuke07xxxxxx.blob.core.windows.net/?comp=list | grep -o -E 'AuthorizationFailure|PublicAccessNotPermitted' || echo ingen kontakt</code></pre>
 <pre><code>try { Invoke-WebRequest -UseBasicParsing "https://$ST.blob.core.windows.net/?comp=list" } catch { $_.ErrorDetails.Message }</code></pre>
@@ -516,9 +562,10 @@ az network nic show-effective-route-table -g $RG -n vm-db-nic `
   </p>
   <p>
     <b>Oppgave:</b> åpne storage accounten og <b>Security + networking → Networking → Private endpoints</b>, og lag
-    <code>pe-blob</code>: sub-resource <code>blob</code>, <code>vnet-app</code> og subnettet <code>web</code>, med
-    integrasjon mot private DNS zone. Kjør <code>nslookup stuke07xxxxxx.blob.core.windows.net</code> på
-    <code>vm-web</code> og lokalt, og sammenlign. Slå så av public network access, og kjør sjekkene fra steg 8 på nytt.
+    <code>pe-blob</code>: <i>Target sub-resource</i> <code>blob</code>, <code>vnet-app</code> og subnettet <code>web</code>,
+    og <i>Integrate with private DNS zone</i> på <i>Yes</i>. Kjør <code>nslookup stuke07xxxxxx.blob.core.windows.net</code> på
+    <code>vm-web</code> og lokalt, og sammenlign. Slå så av public network access med <b>Manage</b> og <i>Disable</i> på
+    fanen <i>Public access</i>, og kjør sjekkene fra steg 8 på nytt.
   </p>
   <p>
     Lokalt går navnet via <code>privatelink</code> til en public IP, og på <code>vm-web</code> til en adresse i
@@ -551,12 +598,16 @@ az storage account update -g $RG -n $ST --public-network-access Disabled --query
     følger med hvis adressen endres. Den kan stå på roten av domenet, der en CNAME ikke er lov.
   </p>
   <p>
-    <b>Oppgave:</b> lag private DNS-sonen <code>uke07.intern</code>. Link den til <code>vnet-app</code> med
-    autoregistrering og til <code>vnet-hub</code> uten. Se postene som kom av seg selv, og kjør
-    <code>nslookup vm-db.uke07.intern; nslookup vm-nva.uke07.intern</code> på <code>vm-nva</code>. Lag så en DNS zone
+    <b>Oppgave:</b> lag private DNS-sonen <code>uke07.intern</code>, og åpne den. Under
+    <b>Virtual Network Links → Add</b> lager du linken <code>app</code> til <code>vnet-app</code> med
+    <i>Enable auto registration</i>, og linken <code>hub</code> til <code>vnet-hub</code> uten. Se postene som kom av seg selv, og kjør
+    <code>nslookup vm-db.uke07.intern; nslookup vm-nva.uke07.intern</code> med run command på <code>vm-nva</code>. Bastion
+    Developer når den ikke, fordi den står i et peeret VNet. Lag så en DNS zone
     som heter <code>uke07-</code> og verdien av <code>$ID</code>, med <code>.no</code> til slutt. Legg til A-posten
-    <code>www</code> med <code>203.0.113.10</code>, og en alias-post på <code>@</code> som peker på <code>pip-web</code>.
-    Slå opp begge mot en av navnetjenerne til sonen.
+    <code>www</code> med <code>203.0.113.10</code>, og en post på <code>@</code> med <i>Alias record set</i> som peker på
+    <code>pip-web</code>. Slå opp begge lokalt mot en av navnetjenerne til sonen. Navnetjenerne står på
+    <b>Overview</b>, og kommandoen er <code>nslookup www.uke07-xxxxxx.no ns1-0X.azure-dns.com.</code>, med ditt
+    domene og en av navnetjenerne dine.
   </p>
   <p>
     <code>vm-nva</code> står ikke i sonen, fordi <code>vnet-hub</code> ikke har autoregistrering. Linkene tok rundt ett
@@ -590,14 +641,17 @@ nslookup $ZONE $NS</code></pre>
       <tbody>
         <tr><td><code>NetcfgSubnetRangesOverlap</code></td><td>Det er meningen i steg 1. Subnettet overlapper med <code>db</code></td></tr>
         <tr><td><code>ingen vei ut</code> fra <code>vm-db</code></td><td>Det er meningen i steg 2. Subnettet er private, og <code>vm-db</code> har ingen public IP</td></tr>
+        <tr><td><code>vm-web</code> gir <code>ingen vei ut</code>, og <code>vm-db</code> viser en public IP</td><td><code>pip-web</code> er koblet til <code>vm-db-nic</code>. Flytt den til <code>vm-web-nic</code></td></tr>
         <tr><td>Peeringen står som <code>Initiated</code></td><td>Bare den ene siden er laget. Lag peeringen fra det andre VNet-et også</td></tr>
-        <tr><td><code>tracepath</code> viser ikke <code>10.70.1.4</code></td><td>Route tablen er ikke koblet til subnettet <code>web</code></td></tr>
+        <tr><td>Peeringene har byttet navn, eller forwarded traffic står på <code>vnet-hub</code></td><td>Den øverste delen av dialogen gjelder det andre VNet-et. Forwarded traffic retter du på peeringen i <code>vnet-app</code>. Navnene kan ikke endres, men de har ikke noe å si for resten av labben</td></tr>
+        <tr><td><code>tracepath</code> viser ikke <code>10.70.1.4</code></td><td>Route tablen mangler ruten <code>til-db</code>, eller den er ikke koblet til subnettet <code>web</code>. Er begge deler riktig, sjekk at ruten står i effective routes på <code>vm-web-nic</code>, og vent litt før du prøver igjen</td></tr>
         <tr><td><code>tracepath</code> stopper ved <code>10.70.1.4</code> eller gir <code>no reply</code></td><td>IP forwarding mangler på NIC-en eller i Linux, eller peeringen <code>app-til-hub</code> tar ikke imot forwarded traffic</td></tr>
         <tr><td><code>succeeded</code> selv om deny-regelen har prioritet 150</td><td>NSG-en er ikke koblet til subnettet <code>db</code>, eller VM-ene mangler ASG-ene</td></tr>
         <tr><td><code>The command requires the extension bastion</code></td><td>Utvidelsen fra <b>Før møtet</b> mangler. Svar <code>Y</code>, eller kjør <code>az extension add -n bastion</code></td></tr>
         <tr><td>Bastion avviser passordet</td><td><code>$PASSORD</code> er nytt hver gang du kjører linjene fra <b>Før møtet</b>. Sett det på VM-en igjen med <code>az vm user update -g $RG -n vm-db -u azureuser -p $PASSORD</code></td></tr>
-        <tr><td><code>AuthorizationFailure</code> fra <code>vm-db</code> i steg 8</td><td>VNet-regelen eller service endpointen mangler på subnettet <code>db</code></td></tr>
+        <tr><td><code>AuthorizationFailure</code> fra <code>vm-db</code> i steg 8</td><td>VNet-regelen eller service endpointen mangler på subnettet <code>db</code>. Åpne <b>Manage</b> igjen, se at <code>vnet-app</code> med <code>db</code> står i tabellen under <i>Virtual Networks</i>, og trykk <b>Save</b>. Regelen kan mangle selv om endpointen kom på plass</td></tr>
         <tr><td><code>vm-web</code> slår opp en public IP i steg 9</td><td>DNS-integrasjonen mangler. Sjekk at sonen er linket til <code>vnet-app</code>, og at endepunktet har en DNS zone group</td></tr>
+        <tr><td><code>NXDOMAIN</code> for <code>vm-db.uke07.intern</code></td><td>Du slo opp lokalt. En private zone svarer bare i VNet-ene den er linket til. Kjør oppslaget med run command på <code>vm-nva</code></td></tr>
         <tr><td><code>Non-existent domain</code> for public zone</td><td>Du slo ikke opp mot navnetjeneren til sonen. Domenet er ikke delegert</td></tr>
         <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-07</code>, og kjør linjene fra <b>Før møtet</b> på nytt. Du får samme navn, men nytt passord. <code>$SAID</code> står i steg 9 og <code>$ZONE</code> i steg 10</td></tr>
       </tbody>
