@@ -48,7 +48,9 @@
   </div>
 </div>
 
-  <div class="callout warn">VPN Gateway og Application Gateway koster per time, uansett bruk. Nettverkslabbene i uke 7 og 8 rives ned samme dag.</div>
+  <div class="callout info">Application Gateway står ikke lenger i studieguiden. Learn-modul 7 og Duffy 157 viser den, men vi bygger den ikke.</div>
+
+  <div class="callout warn">VM-ene, load balancerne og NAT gatewayen koster rundt 0,36 USD i timen til sammen. Slett alt før vi går.</div>
 
 <!-- ======================================================================
      Forberedelse
@@ -95,10 +97,482 @@
      ====================================================================== -->
 <section id="lab">
   <div class="eyebrow">Lab · 60 min</div>
-  <h2>Lab</h2>
-  <div class="callout info">
-    Labben i møtet er Learn-øvelsene over. Alle bygger samtidig i sin egen subscription.
-    Lager temaeieren en egen veiledning eller fasit, kommer den her.
+  <h2>Lastbalansering og feilsøking av nettverk</h2>
+  <p class="section-lead">
+    Learn-modulene har ingen øvelser, så her er en egen lab i samme rekkefølge som studieguiden. Hvert steg er en
+    oppgave du løser i portalen. Står du fast, eller vil du sjekke resultatet, ligger kommandoen under
+    <b>Vis kommando</b>. Tester inne i VM-ene kjører du med run command, som i <a href="../uke-07/#lab">uke 7</a>.
+    Går tiden fra deg, hopp over steg 4. Fasiten ligger <a href="#fasit">under labben</a>.
+  </p>
+
+  <h3>Før møtet</h3>
+  <p>
+    Samme oppsett som i <a href="../uke-02/#lab">uke 2</a>: portalen i et privat vindu med lab-brukeren, og
+    <code>az</code> lokalt med kursprofilen eller i Cloud Shell. Lag en mappe til labben, og sett variablene:
+  </p>
+<pre><code>mkdir uke-08
+cd uke-08
+$RG = "rg-uke08"
+$L = "swedencentral"</code></pre>
+  <p>
+    Registrer også resource providerne som labben bruker. Er en provider registrert fra før, skjer det ingenting.
+    Ellers tar registreringen et par minutter.
+  </p>
+<pre><code>"Microsoft.Network","Microsoft.Compute","Microsoft.DevTestLab","Microsoft.Insights","Microsoft.OperationalInsights" | ForEach-Object {
+  az provider register --namespace $_
+}</code></pre>
+
+  <h3>Del A — Lastbalansering (ca. 35 min)</h3>
+
+  <h4>1. Nett og webservere i Bicep</h4>
+  <p>
+    <b>Hvorfor:</b> en load balancer trenger noe å fordele trafikken på. Fila lager to webservere og en klient-VM.
+    Webserverne svarer med navnet sitt, så du ser hvilken som svarte, og klienten tester fra innsiden av VNet-et.
+    Subnettene er private, så
+    VM-ene kommer ikke ut på internett og kan ikke laste ned pakker. Derfor bruker webserveren Python, som allerede
+    finnes i Ubuntu.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>rg-uke08</code> i Sweden Central, og deploy fila under. Den lager <code>vnet-uke08</code>
+    med subnettene <code>web</code> og <code>klient</code>. I <code>web</code> står <code>vm-web1</code> og
+    <code>vm-web2</code>, og i <code>klient</code> står <code>vm-klient</code>. Subnettet <code>web</code> har NSG-en
+    <code>nsg-web</code>, som bare har standardreglene. VM-ene har ingen public IP og slår seg av kl. 20.
+  </p>
+<pre><code>@'
+@description('Størrelsen på VM-ene')
+param vmSize string = 'Standard_D2als_v6'
+
+@description('Brukernavnet til administratoren')
+param adminUsername string = 'azureuser'
+
+@secure()
+@description('Passordet til administratoren. Vi logger ikke inn på VM-ene, så du trenger det ikke')
+param adminPassword string = 'Az-${newGuid()}'
+
+@description('VM-ene, subnettene de står i, og de faste IP-ene deres. Webserverne svarer med navnet sitt på port 80')
+var vmer = [
+  {
+    navn: 'vm-web1'
+    subnet: 'web'
+    ip: '10.8.1.4'
+    web: true
+  }
+  {
+    navn: 'vm-web2'
+    subnet: 'web'
+    ip: '10.8.1.5'
+    web: true
+  }
+  {
+    navn: 'vm-klient'
+    subnet: 'klient'
+    ip: '10.8.2.4'
+    web: false
+  }
+]
+
+@description('Webserveren bruker Python, som allerede finnes i Ubuntu. Subnettene er private, så VM-ene kan ikke laste ned pakker')
+var webserver = '''
+#cloud-config
+write_files:
+  - path: /etc/systemd/system/web.service
+    content: |
+      [Unit]
+      Description=Webserver som svarer med navnet til VM-en
+      [Service]
+      ExecStart=/usr/bin/python3 -m http.server 80 --directory /var/www
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - mkdir -p /var/www
+  - hostname &gt; /var/www/index.html
+  - systemctl daemon-reload
+  - systemctl enable --now web
+'''
+
+resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: 'nsg-web'
+  location: resourceGroup().location
+}
+
+resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'vnet-uke08'
+  location: resourceGroup().location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [ '10.8.0.0/16' ]
+    }
+    subnets: [
+      {
+        name: 'web'
+        properties: {
+          addressPrefix: '10.8.1.0/24'
+          defaultOutboundAccess: false
+          networkSecurityGroup: {
+            id: nsg.id
+          }
+        }
+      }
+      {
+        name: 'klient'
+        properties: {
+          addressPrefix: '10.8.2.0/24'
+          defaultOutboundAccess: false
+        }
+      }
+    ]
+  }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = [for v in vmer: {
+  name: '${v.navn}-nic'
+  location: resourceGroup().location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          privateIPAllocationMethod: 'Static'
+          privateIPAddress: v.ip
+          subnet: {
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, v.subnet)
+          }
+        }
+      }
+    ]
+  }
+}]
+
+resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = [for (v, i) in vmer: {
+  name: v.navn
+  location: resourceGroup().location
+  properties: {
+    hardwareProfile: {
+      vmSize: vmSize
+    }
+    osProfile: {
+      computerName: v.navn
+      adminUsername: adminUsername
+      adminPassword: adminPassword
+      customData: v.web ? base64(webserver) : null
+    }
+    storageProfile: {
+      imageReference: {
+        publisher: 'Canonical'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
+        version: 'latest'
+      }
+      osDisk: {
+        name: '${v.navn}-osdisk'
+        createOption: 'FromImage'
+        deleteOption: 'Delete'
+        managedDisk: {
+          storageAccountType: 'StandardSSD_LRS'
+        }
+      }
+    }
+    networkProfile: {
+      networkInterfaces: [
+        {
+          id: nic[i].id
+          properties: {
+            deleteOption: 'Delete'
+          }
+        }
+      ]
+    }
+  }
+}]
+
+@description('Network Watcher-agenten på vm-klient. Connection troubleshoot og connection monitor trenger den i steg 7 og 8')
+resource agent 'Microsoft.Compute/virtualMachines/extensions@2024-07-01' = {
+  parent: vm[2]
+  name: 'NetworkWatcherAgentLinux'
+  location: resourceGroup().location
+  properties: {
+    publisher: 'Microsoft.Azure.NetworkWatcher'
+    type: 'NetworkWatcherAgentLinux'
+    typeHandlerVersion: '1.4'
+    autoUpgradeMinorVersion: true
+  }
+}
+
+resource autoShutdown 'Microsoft.DevTestLab/schedules@2018-09-15' = [for (v, i) in vmer: {
+  name: 'shutdown-computevm-${v.navn}'
+  location: resourceGroup().location
+  properties: {
+    status: 'Enabled'
+    taskType: 'ComputeVmShutdownTask'
+    dailyRecurrence: {
+      time: '2000'
+    }
+    timeZoneId: 'W. Europe Standard Time'
+    targetResourceId: vm[i].id
+    notificationSettings: {
+      status: 'Disabled'
+    }
+  }
+}]
+
+@description('Log Analytics-workspacen til connection monitoren i steg 8')
+resource logg 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: 'log-uke08'
+  location: resourceGroup().location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+'@ | Set-Content main.bicep -Encoding utf8</code></pre>
+<pre><code>az group create --name $RG --location $L --query properties.provisioningState -o tsv
+az deployment group create -g $RG --name nett --template-file main.bicep --query properties.provisioningState -o tsv</code></pre>
+  <p>
+    Deployen tok i underkant av to minutter i testen, og webserverne startet et par minutter etter at den var ferdig.
+    Se på reglene i <code>nsg-web</code> under
+    <b>Settings → Inbound security rules</b>. Kjør så linja under på <code>vm-klient</code> med
+    <b>Operations → Run command → RunShellScript</b>.
+  </p>
+<pre><code>curl -s -m 5 http://10.8.1.4; curl -s -m 5 http://10.8.1.5</code></pre>
+  <p>Du skal få navnene <code>vm-web1</code> og <code>vm-web2</code>. Hver run command tar rundt et halvt minutt.</p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az vm list -g $RG -d --query "[].{navn:name, ip:privateIps, status:powerState}" -o table
+az network nsg rule list -g $RG --nsg-name nsg-web --include-default `
+  --query "[?direction=='Inbound'].{navn:name, prioritet:priority, tilgang:access}" -o table
+az vm run-command invoke -g $RG -n vm-klient --command-id RunShellScript --scripts "curl -s -m 5 http://10.8.1.4; curl -s -m 5 http://10.8.1.5" `
+  --query "value[0].message" -o tsv</code></pre>
+  </div></details>
+
+  <h4>2. Offentlig load balancer</h4>
+  <p>
+    <b>Hvorfor:</b> Azure Load Balancer fordeler nye TCP- og UDP-tilkoblinger mellom VM-ene i en backend pool. Den
+    består av fire deler: en frontend-IP, en backend pool, en health probe som sjekker hvilke VM-er som svarer, og en
+    regel som knytter dem sammen. En offentlig load balancer har en public IP som frontend. Standard er den eneste
+    SKU-en etter at Basic ble faset ut i 2025.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag load balanceren <code>lb-web</code> med SKU Standard, type Public og tier Regional. Gi den
+    frontend-IP-en <code>fe-web</code> med en ny public IP, <code>pip-lb</code>, og backend poolen <code>web</code> med
+    <code>vm-web1</code> og <code>vm-web2</code>. Lag regelen <code>http</code> fra port 80 til port 80, med en ny
+    health probe, <code>http</code>, av typen HTTP på port 80 og stien <code>/</code>. Når load balanceren er klar,
+    kjører du linjene under lokalt.
+  </p>
+<pre><code>$LB = az network public-ip show -g $RG -n pip-lb --query ipAddress -o tsv
+1..6 | ForEach-Object { try { (Invoke-WebRequest "http://$LB" -UseBasicParsing -DisableKeepAlive -TimeoutSec 5).Content.Trim() } catch { "ingen svar" } }</code></pre>
+  <p>Alle seks gir <code>ingen svar</code>. Årsaken finner du i steg 3.</p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network public-ip create -g $RG -n pip-lb --sku Standard --query publicIp.ipAddress -o tsv
+az network lb create -g $RG -n lb-web --sku Standard --public-ip-address pip-lb --frontend-ip-name fe-web --backend-pool-name web `
+  --query loadBalancer.provisioningState -o tsv
+az network lb probe create -g $RG --lb-name lb-web -n http --protocol Http --port 80 --path / --query provisioningState -o tsv
+az network lb rule create -g $RG --lb-name lb-web -n http --protocol Tcp --frontend-port 80 --backend-port 80 --frontend-ip-name fe-web `
+  --backend-pool-name web --probe-name http --disable-outbound-snat true --query provisioningState -o tsv
+"vm-web1","vm-web2" | ForEach-Object {
+  az network nic ip-config address-pool add -g $RG --nic-name "$_-nic" --ip-config-name ipconfig1 --lb-name lb-web --address-pool web -o none
+}</code></pre>
+  <p>Det tok under ett minutt i testen.</p>
+  </div></details>
+
+  <h4>3. Feilsøk load balanceren</h4>
+  <p>
+    <b>Hvorfor:</b> en load balancer med SKU Standard er stengt for trafikk inn til en NSG åpner. Health proben kommer
+    fra Azure-plattformen med service tagen <code>AzureLoadBalancer</code>, og den slipper inn via en standardregel.
+    VM-ene kan derfor være friske i load balanceren selv om klientene blir stoppet. Health probe status er det første
+    du sjekker: en VM som ikke svarer på proben, får ingen nye tilkoblinger.
+  </p>
+  <p>
+    <b>Oppgave:</b> legg til den innkommende regelen <code>tillat-http</code> i <code>nsg-web</code>, med kilde
+    <code>Internet</code>, port 80, <i>Allow</i> og prioritet 100. Kjør testen fra steg 2 igjen. Stopp så webserveren
+    på <code>vm-web1</code> med run command og <code>systemctl stop web</code>, og kjør testen enda en gang. Åpne
+    <code>lb-web</code> og <b>Monitoring → Metrics</b>. Velg <i>Health Probe Status</i>, og del opp på
+    <i>Backend IP Address</i> med <b>Apply splitting</b>. Start til slutt webserveren igjen med
+    <code>systemctl start web</code>.
+  </p>
+  <p>
+    Med regelen svarer begge VM-ene. Når webserveren er stoppet, svarer bare <code>vm-web2</code>, og etter et par
+    minutter viser metrikken at <code>10.8.1.4</code> har falt ut.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network nsg rule create -g $RG --nsg-name nsg-web -n tillat-http --priority 100 --access Allow --protocol Tcp `
+  --source-address-prefixes Internet --destination-port-ranges 80 --query provisioningState -o tsv
+az vm run-command invoke -g $RG -n vm-web1 --command-id RunShellScript --scripts "systemctl stop web" --query "value[0].message" -o tsv
+$LBID = az network lb show -g $RG -n lb-web --query id -o tsv
+az monitor metrics list --resource $LBID --metric DipAvailability --filter "BackendIPAddress eq '*'" --interval PT1M `
+  --query "value[0].timeseries[].{ip:metadatavalues[0].value, prosent:data[?average].average | [-1]}" -o table
+az vm run-command invoke -g $RG -n vm-web1 --command-id RunShellScript --scripts "systemctl start web" --query "value[0].message" -o tsv</code></pre>
+  <p>
+    I API-et heter Health Probe Status <code>DipAvailability</code>. Metrikken viser snittet per minutt, så kjør
+    kommandoen gjerne et par ganger.
+  </p>
+  </div></details>
+
+  <h4>4. Session persistence</h4>
+  <p>
+    <b>Hvorfor:</b> load balanceren velger VM ut fra en hash av fem verdier: kilde-IP, kildeport, mål-IP, målport og
+    protokoll. Hver ny tilkobling kan derfor havne på en annen VM. Med session persistence satt til <i>Client IP</i>
+    bruker hashen bare kilde- og mål-IP, og samme klient havner på samme VM så lenge den er frisk.
+    <i>Client IP and protocol</i> tar i tillegg med protokollen.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne regelen <code>http</code> i <code>lb-web</code> under <b>Settings → Load balancing rules</b>,
+    og sett <b>Session persistence</b> til <i>Client IP</i>. Kjør testen fra steg 2 igjen.
+  </p>
+  <p>Nå svarer samme VM alle seks gangene. I testen virket endringen med en gang.</p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network lb rule update -g $RG --lb-name lb-web -n http --load-distribution SourceIP --query loadDistribution -o tsv</code></pre>
+  <p>I API-et heter valgene <code>Default</code>, <code>SourceIP</code> og <code>SourceIPProtocol</code>.</p>
+  </div></details>
+
+  <h4>5. Intern load balancer</h4>
+  <p>
+    <b>Hvorfor:</b> en intern load balancer har en privat IP som frontend og nås bare fra VNet-et, fra peerede VNet og
+    fra on-prem. Den står typisk foran et app- eller databaselag som ikke skal nås fra internett. Samme VM kan stå i
+    backend poolen til både en offentlig og en intern load balancer.
+  </p>
+  <p>
+    <b>Oppgave:</b> lag <code>lb-intern</code> med SKU Standard og type Internal. Frontend-IP-en <code>fe-intern</code>
+    skal stå i subnettet <code>web</code> med den statiske adressen <code>10.8.1.100</code>. Gi load balanceren backend
+    poolen <code>web</code> med de samme to VM-ene, og regelen og health proben <code>http</code> som i steg 2. Kjør
+    linja under på <code>vm-klient</code>.
+  </p>
+<pre><code>for i in 1 2 3 4 5 6; do curl -s -m 3 http://10.8.1.100; done</code></pre>
+  <p>I testen svarte samme VM alle seks gangene, og den andre VM-en da vi kjørte linja på nytt.</p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network lb create -g $RG -n lb-intern --sku Standard --vnet-name vnet-uke08 --subnet web --private-ip-address 10.8.1.100 `
+  --frontend-ip-name fe-intern --backend-pool-name web --query loadBalancer.provisioningState -o tsv
+az network lb probe create -g $RG --lb-name lb-intern -n http --protocol Http --port 80 --path / --query provisioningState -o tsv
+az network lb rule create -g $RG --lb-name lb-intern -n http --protocol Tcp --frontend-port 80 --backend-port 80 --frontend-ip-name fe-intern `
+  --backend-pool-name web --probe-name http --query provisioningState -o tsv
+"vm-web1","vm-web2" | ForEach-Object {
+  az network nic ip-config address-pool add -g $RG --nic-name "$_-nic" --ip-config-name ipconfig1 --lb-name lb-intern --address-pool web -o none
+}
+az vm run-command invoke -g $RG -n vm-klient --command-id RunShellScript --scripts "for i in 1 2 3 4 5 6; do curl -s -m 3 http://10.8.1.100; done" `
+  --query "value[0].message" -o tsv</code></pre>
+  <p>
+    Advarselen om public IP fra den første kommandoen kan du se bort fra. Med <code>--subnet</code> lager den ingen
+    public IP.
+  </p>
+  </div></details>
+
+  <h3>Del B — Network Watcher (ca. 25 min)</h3>
+
+  <h4>6. IP flow verify og next hop</h4>
+  <p>
+    <b>Hvorfor:</b> Network Watcher er en samling verktøy for å overvåke og feilsøke nettverk i en region. Den slås på
+    av seg selv når du lager et VNet, og ligger i <code>NetworkWatcherRG</code>. IP flow verify sier om en pakke slipper
+    gjennom NSG-ene til en VM, og hvilken regel som avgjør det. Next hop viser hvor en pakke fra en VM går videre.
+    Sammen skiller de et NSG-problem fra et rutingproblem, uten at du logger inn på VM-en.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Network Watcher → IP flow verify</b>. Test innkommende TCP til <code>vm-web1</code> på
+    port 80 fra den eksterne adressen <code>203.0.113.10</code>, port 60000. Bytt så til port 22. Åpne
+    <b>Next hop</b>, og test fra <code>vm-klient</code> til <code>10.8.1.100</code> og til <code>8.8.8.8</code>.
+  </p>
+  <p>
+    Port 80 slipper inn via <code>tillat-http</code>, mens port 22 stoppes av <code>DenyAllInBound</code>. Next hop er
+    <i>VirtualNetwork</i> til load balanceren og <i>Internet</i> til <code>8.8.8.8</code>.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network watcher test-ip-flow -g $RG --vm vm-web1 --direction Inbound --protocol TCP --local 10.8.1.4:80 --remote 203.0.113.10:60000 -o table
+az network watcher test-ip-flow -g $RG --vm vm-web1 --direction Inbound --protocol TCP --local 10.8.1.4:22 --remote 203.0.113.10:60000 -o table
+az network watcher show-next-hop -g $RG --vm vm-klient --source-ip 10.8.2.4 --dest-ip 10.8.1.100 -o table
+az network watcher show-next-hop -g $RG --vm vm-klient --source-ip 10.8.2.4 --dest-ip 8.8.8.8 -o table</code></pre>
+  </div></details>
+
+  <h4>7. Connection troubleshoot og vei ut</h4>
+  <p>
+    <b>Hvorfor:</b> next hop sier <i>Internet</i>, men subnettet er privat, så <code>vm-klient</code> kommer likevel
+    ikke ut. Connection troubleshoot prøver en ekte tilkobling fra VM-en via Network Watcher-agenten og viser om den
+    kommer fram. En NAT gateway gir VM-ene i et subnet en felles, fast adresse ut, uten at de kan nås utenfra. Det er
+    den anbefalte måten å gi et privat subnet tilgang til internett på.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Network Watcher → Connection troubleshoot</b>, og test fra <code>vm-klient</code> til
+    <code>www.microsoft.com</code> på port 443. Lag så NAT gatewayen <code>ng-klient</code> med en ny public IP,
+    <code>pip-ng</code>, og koble den til subnettet <code>klient</code>. Test igjen, og kjør
+    <code>curl -s -m 5 https://ifconfig.me</code> på <code>vm-klient</code>.
+  </p>
+  <p>
+    Først får du <i>Unreachable</i> og etterpå <i>Reachable</i>, og <code>curl</code> viser IP-en til
+    <code>pip-ng</code>. Hver kjøring av connection troubleshoot tok drøyt ett minutt i testen.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>az network watcher test-connectivity -g $RG --source-resource vm-klient --dest-address www.microsoft.com --dest-port 443 `
+  --query "{status:connectionStatus, sendt:probesSent, feilet:probesFailed}" -o table
+az network public-ip create -g $RG -n pip-ng --sku Standard --query publicIp.ipAddress -o tsv
+az network nat gateway create -g $RG -n ng-klient --public-ip-addresses pip-ng --query provisioningState -o tsv
+az network vnet subnet update -g $RG --vnet-name vnet-uke08 -n klient --nat-gateway ng-klient --query natGateway.id -o tsv
+az network watcher test-connectivity -g $RG --source-resource vm-klient --dest-address www.microsoft.com --dest-port 443 `
+  --query "{status:connectionStatus, sendt:probesSent, feilet:probesFailed}" -o table
+az vm run-command invoke -g $RG -n vm-klient --command-id RunShellScript --scripts "curl -s -m 5 https://ifconfig.me" --query "value[0].message" -o tsv</code></pre>
+  </div></details>
+
+  <h4>8. Connection monitor</h4>
+  <p>
+    <b>Hvorfor:</b> connection troubleshoot sjekker én gang. Connection monitor tester de samme forbindelsene hele
+    tiden, lagrer resultatene i Log Analytics og kan varsle når en forbindelse faller ut.
+  </p>
+  <p>
+    <b>Oppgave:</b> åpne <b>Network Watcher → Connection monitor → Create</b>. Kall den <code>cm-uke08</code>, velg
+    Sweden Central, og bruk workspacen <code>log-uke08</code> i stedet for den som connection monitor ellers lager. Lag
+    testgruppen <code>web</code> med <code>vm-klient</code> som kilde og <code>vm-web1</code> og
+    <code>www.microsoft.com</code> som mål. Legg til testkonfigurasjonen <code>tcp-80</code>: TCP på port 80 hvert 30.
+    sekund. Når resultatene har kommet, stopper du webserveren på <code>vm-web1</code> som i steg 3. Se hvordan
+    statusen endrer seg, og start webserveren igjen.
+  </p>
+  <p>
+    I testen kom de første resultatene etter rundt fire minutter, og feilen mot <code>vm-web1</code> viste seg to
+    minutter etter at webserveren ble stoppet.
+  </p>
+  <details><summary>Vis kommando</summary><div>
+<pre><code>$WS = az monitor log-analytics workspace show -g $RG -n log-uke08 --query id -o tsv
+$KLIENT = az vm show -g $RG -n vm-klient --query id -o tsv
+$WEB1 = az vm show -g $RG -n vm-web1 --query id -o tsv
+az network watcher connection-monitor create -n cm-uke08 -l $L --test-group-name web `
+  --endpoint-source-name vm-klient --endpoint-source-resource-id $KLIENT `
+  --endpoint-dest-name vm-web1 --endpoint-dest-resource-id $WEB1 `
+  --test-config-name tcp-80 --protocol Tcp --tcp-port 80 --frequency 30 --workspace-ids $WS --query provisioningState -o tsv
+az network watcher connection-monitor endpoint add --connection-monitor cm-uke08 -l $L -n microsoft --address www.microsoft.com `
+  --dest-test-groups web -o none
+$CM = az network watcher connection-monitor show -n cm-uke08 -l $L --query id -o tsv
+az monitor metrics list --resource $CM --metric ChecksFailedPercent --filter "DestinationName eq '*'" --interval PT1M `
+  --query "value[0].timeseries[].{til:metadatavalues[0].value, feilet:data[?average].average | [-1]}" -o table</code></pre>
+  <p><code>ChecksFailedPercent</code> er andelen sjekker som feilet, i prosent.</p>
+  </div></details>
+
+  <h3 id="vanlige-feil">Vanlige feil</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Årsak og løsning</th></tr></thead>
+      <tbody>
+        <tr><td>Deployen i steg 1 feiler med en melding om kvote</td><td>VM-ene fra uke 7 står fortsatt. Kvoten er 10 vCPU-er per region, og labben bruker 6. Slett <code>rg-uke07</code></td></tr>
+        <tr><td><code>curl</code> på <code>vm-klient</code> gir ingenting i steg 1</td><td>Webserverne har ikke startet ennå. Vent et minutt, og kjør linja igjen</td></tr>
+        <tr><td><code>ingen svar</code> i steg 2</td><td>Det er meningen. <code>nsg-web</code> har ingen regel som slipper inn port 80 fra internett ennå</td></tr>
+        <tr><td><code>ingen svar</code> etter regelen i steg 3</td><td>Sjekk at regelen gjelder port 80 med kilde <code>Internet</code>, og at begge VM-ene står i backend poolen. IP flow verify i steg 6 viser hvilken regel som stopper trafikken</td></tr>
+        <tr><td>Bare én VM svarer i steg 3</td><td>Webserveren på den andre er stoppet. Start den med <code>systemctl start web</code></td></tr>
+        <tr><td>Metrikken er tom</td><td>Tallene kommer med et par minutters forsinkelse. Velg de siste 30 minuttene, og prøv igjen</td></tr>
+        <tr><td><code>curl</code> på <code>vm-klient</code> gir ingenting i steg 5</td><td>Frontend-IP-en er ikke <code>10.8.1.100</code>, eller VM-ene mangler i backend poolen til <code>lb-intern</code></td></tr>
+        <tr><td>Connection monitor viser ingen resultater</td><td>De første kommer etter noen minutter. Sjekk at <code>vm-klient</code> har <code>NetworkWatcherAgentLinux</code> under <b>Settings → Extensions + applications</b></td></tr>
+        <tr><td>Variablene er tomme</td><td>Nytt vindu, eller Cloud Shell har lukket sesjonen. Gå til mappa igjen med <code>cd uke-08</code>, og kjør linjene fra <b>Før møtet</b> på nytt. <code>$LB</code> står i steg 2, <code>$LBID</code> i steg 3 og <code>$CM</code> i steg 8</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Fasit
+     ====================================================================== -->
+<section id="fasit">
+  <div class="eyebrow">Last ned</div>
+  <h2>Fasit</h2>
+  <p class="section-lead">
+    <code>main.bicep</code> er nettet og VM-ene fra steg 1. Resten står under <b>Vis kommando</b> i hvert steg.
+  </p>
+  <div class="nedlast">
+    <a class="btn-lenke sekundaer" href="main.bicep" download>main.bicep</a>
   </div>
 </section>
 
@@ -118,9 +592,15 @@
 <section id="opprydding">
   <div class="eyebrow">Før vi går</div>
   <h2>Opprydding</h2>
-  <p>Alt fra ukas lab slettes før vi går. Se hva som står i subscriptionen din, og slett resource groupene du laget:</p>
-<pre><code>az group list -o table
-az group delete --name &lt;resource-group&gt; --yes --no-wait</code></pre>
+  <p>
+    Connection monitoren ligger i <code>NetworkWatcherRG</code>, så den sletter du for seg. Resten ligger i
+    <code>rg-uke08</code>.
+  </p>
+<pre><code>az network watcher connection-monitor delete -n cm-uke08 -l $L
+az group delete --name $RG --yes --no-wait</code></pre>
+  <p>Du trenger ikke å vente. Slettingen tok rundt tre minutter i testen. Sjekk senere at gruppen er borte:</p>
+<pre><code>az group list -o table</code></pre>
+  <p><code>NetworkWatcherRG</code> blir stående. Den koster ingenting.</p>
 </section>
 
 <nav class="pager" aria-label="Bla mellom ukene">
