@@ -598,7 +598,7 @@ az monitor metrics list --resource $CM --metric ChecksFailedPercent --filter "De
   </p>
 <pre><code>az network watcher connection-monitor delete -n cm-uke08 -l $L
 az group delete --name $RG --yes --no-wait</code></pre>
-  <p>Du trenger ikke å vente. Slettingen tok rundt tre minutter i testen. Sjekk senere at gruppen er borte:</p>
+  <p>Du trenger ikke å vente. Slettingen tok rundt tre minutter i testen. Sjekk senere at resource groupen er borte:</p>
 <pre><code>az group list -o table</code></pre>
   <p><code>NetworkWatcherRG</code> blir stående. Den koster ingenting.</p>
 </section>
